@@ -1,17 +1,21 @@
 const express = require("express");
 const axios = require("axios");
+const cors = require("cors");
 
 const app = express();
-const PORT = 2589; // Change this if needed
+const PORT = 2589; // Set the API to run on port 2589
 
-const CHECK_INTERVAL = 30 * 1000; // 30 seconds
-const REMOTE_SERVER = "http://example.com"; // Change this to your target server
+const CHECK_INTERVAL = 30 * 1000; // Check every 30 seconds
+const REMOTE_SERVER = "https://example.com"; // Change this to the server you want to check
 
 let serverStatus = {
     online: false,
         lastChecked: null,
             responseTime: null,
             };
+
+            // Enable CORS to allow requests from other domains
+            app.use(cors());
 
             // Function to check server status
             async function checkServer() {
@@ -26,15 +30,17 @@ let serverStatus = {
                                                             serverStatus.lastChecked = new Date().toISOString();
                                                             }
 
-                                                            // Check the server at intervals
+                                                            // Run the check every 30 seconds
                                                             setInterval(checkServer, CHECK_INTERVAL);
                                                             checkServer(); // Initial check
 
-                                                            // API route to get the status
+                                                            // API route to get the server status
                                                             app.get("/status", (req, res) => {
                                                                 res.json(serverStatus);
                                                                 });
 
+                                                                // Start the server on port 2589
                                                                 app.listen(PORT, () => {
-                                                                    console.log(`Server running on http://localhost:${PORT}`);
+                                                                    console.log(`API running at https://blahaj.tr:${PORT}`);
                                                                     });
+                                                                    
