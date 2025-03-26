@@ -1,16 +1,16 @@
 const express = require("express");
-const axios = require("axios");
 const cors = require("cors");
 const fs = require("fs");
 const https = require("https");
 const path = require("path");
+const ping = require("ping");
 
 const app = express();
 const PORT = 2589;
 const REMOTE_SERVERS = [
-    "https://blahaj.tr",
-    "https://xargana.com",
-    "http://srv.xargana.com"
+    "blahaj.tr",
+    "xargana.com",
+    "srv.xargana.com"
 ]; 
 
 const CHECK_INTERVAL = 5 * 1000;
@@ -30,12 +30,13 @@ async function checkServers() {
     for (const server of REMOTE_SERVERS) {
         const startTime = Date.now();
         try {
-            await axios.get(server, { timeout: 5000 });
-            serversStatus[server].online = true;
+            const res = await ping.promise.probe(server);
+            serversStatus[server].online = res.alive;
+            serversStatus[server].responseTime = res.time;
         } catch (error) {
             serversStatus[server].online = false;
+            serversStatus[server].responseTime = null;
         }
-        serversStatus[server].responseTime = Date.now() - startTime;
         serversStatus[server].lastChecked = new Date().toISOString();
     }
 }
