@@ -4,7 +4,9 @@
   "description": "scripts for blahaj.tr",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "pm2 start status/server.js --name status-service-api",
+    "restart": "pm2 restart status-service-api"
   },
   "repository": {
     "type": "git",

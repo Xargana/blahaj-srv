@@ -7,9 +7,9 @@ const path = require("path");
 
 const app = express();
 const PORT = 2589;
-const REMOTE_SERVER = "https://example.com"; // Change this
+const REMOTE_SERVER = "https://blahaj.tr"; 
 
-const CHECK_INTERVAL = 30 * 1000;
+const CHECK_INTERVAL = 5 * 1000;
 
 let serverStatus = {
     online: false,
