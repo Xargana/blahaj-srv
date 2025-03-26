@@ -7,39 +7,44 @@ const path = require("path");
 
 const app = express();
 const PORT = 2589;
-const REMOTE_SERVER = "https://blahaj.tr"; 
+const REMOTE_SERVERS = [
+    "https://blahaj.tr",
+    "https://xargana.com",
+    "http://srv.xargana.com"
+]; 
 
 const CHECK_INTERVAL = 5 * 1000;
 
-let serverStatus = {
-    online: false,
-    lastChecked: null,
-    responseTime: null,
-};
+let serversStatus = {};
+REMOTE_SERVERS.forEach(server => {
+    serversStatus[server] = {
+        online: false,
+        lastChecked: null,
+        responseTime: null,
+    };
+});
 
 app.use(cors());
 
-async function checkServer() {
-    const startTime = Date.now();
-    try {
-        await axios.get(REMOTE_SERVER, { timeout: 5000 });
-        serverStatus.online = true;
-    } catch (error) {
-        serverStatus.online = false;
+async function checkServers() {
+    for (const server of REMOTE_SERVERS) {
+        const startTime = Date.now();
+        try {
+            await axios.get(server, { timeout: 5000 });
+            serversStatus[server].online = true;
+        } catch (error) {
+            serversStatus[server].online = false;
+        }
+        serversStatus[server].responseTime = Date.now() - startTime;
+        serversStatus[server].lastChecked = new Date().toISOString();
     }
-    serverStatus.responseTime = Date.now() - startTime;
-    serverStatus.lastChecked = new Date().toISOString();
 }
 
-setInterval(checkServer, CHECK_INTERVAL);
-checkServer();
+setInterval(checkServers, CHECK_INTERVAL);
+checkServers();
 
 app.get("/", (req, res) => {
-    res.json(serverStatus);
-});
-
-app.get("/", (req, res) => {
-    res.send("<h1>Status API</h1><p>Use <code>/status</code> to check server status.</p>");
+    res.json(serversStatus);
 });
 
 // Load SSL Certificates
@@ -50,5 +55,5 @@ const sslOptions = {
 
 // Start HTTPS Server
 https.createServer(sslOptions, app).listen(PORT, () => {
-    console.log(`API running at https://blahaj.tr:${PORT}`);
+    console.log(`API running at https://localhost:${PORT}`);
 });
