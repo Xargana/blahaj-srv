@@ -6,7 +6,7 @@ const app = express();
 const PORT = 2589; // Set the API to run on port 2589
 
 const CHECK_INTERVAL = 30 * 1000; // Check every 30 seconds
-const REMOTE_SERVER = "https://srv.xargana.com"; // Change this to the server you want to check
+const REMOTE_SERVER = "https://blahaj.tr"; // Change this to the server you want to check
 
 let serverStatus = {
     online: false,
@@ -35,7 +35,7 @@ setInterval(checkServer, CHECK_INTERVAL);
 checkServer(); // Initial check
 
 // API route to get the server status
-app.get("/status", (req, res) => {
+app.get("/", (req, res) => {
     res.json(serverStatus);
 });
 
