@@ -7,6 +7,8 @@ const ping = require("ping");
 
 const app = express();
 const PORT = 2589;
+const key = "/etc/letsencrypt/live/blahaj.tr/privkey.pem"
+const cert = "/etc/letsencrypt/live/blahaj.tr/fullchain.pem"
 const REMOTE_SERVERS = [
     "blahaj.tr",
     "xargana.com",
@@ -50,11 +52,15 @@ app.get("/", (req, res) => {
 
 // Load SSL Certificates
 const sslOptions = {
-    key: fs.readFileSync("/etc/letsencrypt/live/blahaj.tr/privkey.pem"),
-    cert: fs.readFileSync("/etc/letsencrypt/live/blahaj.tr/fullchain.pem"),
+    key: fs.readFileSync(key),
+    cert: fs.readFileSync(cert),
 };
 
 // Start HTTPS Server
-https.createServer(sslOptions, app).listen(PORT, () => {
-    console.log(`API running at https://localhost:${PORT}`);
-});
+try {
+    https.createServer(sslOptions, app).listen(PORT, () => {
+        console.log(`API running at https://localhost:${PORT}`);
+    });
+} catch (e) {
+    console.error("Error starting server:", e);
+}
