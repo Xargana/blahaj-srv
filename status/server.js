@@ -57,6 +57,10 @@ const sslOptions = {
 };
 
 // Start HTTPS Server
-https.createServer(sslOptions, app).listen(PORT, () => {
-    console.log(`API running at https://localhost:${PORT}`);
-});
+try {
+    https.createServer(sslOptions, app).listen(PORT, () => {
+        console.log(`API running at https://localhost:${PORT}`);
+    });
+} catch (e) {
+    console.error("Error starting server:", e);
+}
