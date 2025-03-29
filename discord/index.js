@@ -791,9 +791,9 @@ case "anime":
     const maxHops = interaction.options.getInteger("hops") || 30;
     
     const { exec } = require('child_process');
-    // exec(`traceroute -m ${maxHops} ${target}`, async (error, stdout, stderr) => {
+      exec(`traceroute -m ${maxHops} ${target}`, async (error, stdout, stderr) => {
       // windows version
-      exec(`tracert -d -h ${maxHops} ${target}`, async (error, stdout, stderr) => {
+      // exec(`tracert -d -h ${maxHops} ${target}`, async (error, stdout, stderr) => {
         const traceEmbed = {
         title: "Traceroute Results",
         description: `Target: ${target}\nMax Hops: ${maxHops}`,
