@@ -4,4 +4,4 @@ git commit -a -m "auto update"
 git pull origin main
 chown -R www-data:www-data /var/server/blahaj-srv 
 pm2 restart node-api
-pm2 restart blahaj-discord
+pm2 restart discord-blahaj.tr
