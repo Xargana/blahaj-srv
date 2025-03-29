@@ -785,39 +785,33 @@ case "anime":
   }
   break;
   case "traceroute":
-  try {
-    await interaction.deferReply();
-    const target = interaction.options.getString("target");
-    const maxHops = interaction.options.getInteger("hops") || 30;
-    
-    const { exec } = require('child_process');
-      exec(`traceroute -m ${maxHops} ${target}`, async (error, stdout, stderr) => {
-      // windows version
-      // exec(`tracert -d -h ${maxHops} ${target}`, async (error, stdout, stderr) => {
-        const traceEmbed = {
-        title: "Traceroute Results",
-        description: `Target: ${target}\nMax Hops: ${maxHops}`,
-        color: 0x3498db,
-        fields: [
-          {
-            name: "Path",
-            value: `\`\`\`${stdout || stderr || 'No response'}\`\`\``
-          }
-        ],
-        timestamp: new Date(),
-        footer: { text: "Network Diagnostics" }
-      };
+    try {
+      await interaction.deferReply();
+      const target = interaction.options.getString("target");
+      const maxHops = interaction.options.getInteger("hops") || 30;
       
-      await interaction.editReply({ embeds: [traceEmbed] });
-    });
-  } catch (error) {
-    console.error(error);
-    await interaction.editReply({
-      content: "Failed to perform traceroute. Please check the target and try again.",
-      ephemeral: true
-    });
-  }
-  break;
+      const { exec } = require('child_process');
+      exec(`traceroute -m ${maxHops} ${target}`, async (error, stdout, stderr) => {
+        const output = stdout || stderr || 'No response';
+        
+        const traceEmbed = {
+          title: "Traceroute Results",
+          description: `Target: ${target}\nMax Hops: ${maxHops}\n\n\`\`\`\n${output}\`\`\``,
+          color: 0x3498db,
+          timestamp: new Date(),
+          footer: { text: "Network Diagnostics" }
+        };
+        
+        await interaction.editReply({ embeds: [traceEmbed] });
+      });
+    } catch (error) {
+      console.error(error);
+      await interaction.editReply({
+        content: "Failed to perform traceroute. Please check the target and try again.",
+        ephemeral: true
+      });
+    }
+    break;  
   case "whois":
   try {
     await interaction.deferReply();
