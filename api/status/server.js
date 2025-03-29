@@ -46,7 +46,7 @@ async function checkServers() {
 setInterval(checkServers, CHECK_INTERVAL);
 checkServers();
 
-app.get("/", (req, res) => {
+app.get("/status", (req, res) => {
     res.json(serversStatus);
 });
 
