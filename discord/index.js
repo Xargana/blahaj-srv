@@ -275,25 +275,40 @@ async function askCody(question) {
     }
     throw error;
   }
-}client.once("ready", async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+}
+client.once("ready", async () => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] Logged in as ${client.user.tag}`);
   await updateCommands();
 
   const ownerId = process.env.OWNER_ID;
   const owner = await client.users.fetch(ownerId);
-  await owner.send(`Bot started successfully at ${new Date().toLocaleString()}`);
+  const startupEmbed = {
+    title: "Bot Status Update",
+    description: "Bot has started successfully",
+    color: 0x00ff00,
+    timestamp: new Date(),
+    fields: [
+      {
+        name: "Bot Name",
+        value: client.user.tag,
+        inline: true
+      },
+      {
+        name: "Start Time",
+        value: new Date().toLocaleString(),
+        inline: true
+      }
+    ],
+    footer: {
+      text: "blahaj-srv"
+    }
+  };
+  
+  await owner.send({ embeds: [startupEmbed] });
 });
 
-client.on("interactionCreate", async (interaction) => {
-    // Safe channel type logging
-    console.log(`Interaction received in: ${interaction.channel?.type || 'Unknown channel type'}`);
-    console.log(`Command name: ${interaction.commandName}`);
-    console.log(`Channel: ${interaction.channel?.id || 'No channel'}`);
-    
-    // Rest of your existing handler code...
-  });
-  
-  
+
 
 client.on("interactionCreate", async (interaction) => {
   // Handle slash commands
