@@ -277,17 +277,15 @@ async function askCody(question) {
   }
 }
 client.once("ready", async () => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] Logged in as ${client.user.tag}`);
+  console.log(`Logged in as ${client.user.tag}`);
   await updateCommands();
 
   const ownerId = process.env.OWNER_ID;
   const owner = await client.users.fetch(ownerId);
   const startupEmbed = {
     title: "Bot Status Update",
-    description: "Bot has started successfully",
+    description: `Bot started successfully at <t:${Math.floor(Date.now() / 1000)}:F>`,
     color: 0x00ff00,
-    timestamp: new Date(),
     fields: [
       {
         name: "Bot Name",
@@ -295,8 +293,8 @@ client.once("ready", async () => {
         inline: true
       },
       {
-        name: "Start Time",
-        value: new Date().toLocaleString(),
+        name: "Relative Time",
+        value: `<t:${Math.floor(Date.now() / 1000)}:R>`,
         inline: true
       }
     ],
@@ -307,6 +305,7 @@ client.once("ready", async () => {
   
   await owner.send({ embeds: [startupEmbed] });
 });
+
 
 
 
