@@ -1,14 +1,9 @@
 const express = require("express");
 const cors = require("cors");
-const fs = require("fs");
-const https = require("https");
-const path = require("path");
 const ping = require("ping");
 
-const app = express();
-const PORT = 2589;
-const key = "/etc/letsencrypt/live/blahaj.tr/privkey.pem"
-const cert = "/etc/letsencrypt/live/blahaj.tr/fullchain.pem"
+const router = express.Router();
+
 const REMOTE_SERVERS = [
     { name: "blahaj.tr", host: "blahaj.tr" },
     { name: "xargana.com", host: "xargana.com" },
@@ -25,8 +20,6 @@ REMOTE_SERVERS.forEach(server => {
         responseTime: null,
     };
 });
-
-app.use(cors());
 
 async function checkServers() {
     for (const server of REMOTE_SERVERS) {
@@ -46,21 +39,8 @@ async function checkServers() {
 setInterval(checkServers, CHECK_INTERVAL);
 checkServers();
 
-app.get("/status", (req, res) => {
+router.get("/", (req, res) => {
     res.json(serversStatus);
 });
 
-// Load SSL Certificates
-const sslOptions = {
-    key: fs.readFileSync(key),
-    cert: fs.readFileSync(cert),
-};
-
-// Start HTTPS Server
-try {
-    https.createServer(sslOptions, app).listen(PORT, () => {
-        console.log(`API running at https://localhost:${PORT}`);
-    });
-} catch (e) {
-    console.error("Error starting server:", e);
-}
+module.exports = router;
