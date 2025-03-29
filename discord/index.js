@@ -9,6 +9,7 @@ const {
 } = require("discord.js");
 const axios = require("axios");
 const ping = require("ping");
+const whois = require('whois-json');
 
 const client = new Client({
     intents: [
@@ -168,6 +169,102 @@ const slashCommands = [
       },
     ],
   },
+  {
+    name: "checkdns",
+    description: "Check if a domain is blocked by running it through a DNS server",
+    type: ApplicationCommandType.ChatInput,
+    dm_permission: true,
+    options: [
+      {
+        name: "domain",
+        description: "Domain name to check (e.g. example.com)",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "provider",
+        description: "DNS provider to use",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        choices: [
+          { name: "Cloudflare (1.1.1.1)", value: "1.1.1.1" },
+          { name: "Google (8.8.8.8)", value: "8.8.8.8" },
+          { name: "OpenDNS", value: "208.67.222.222" },
+          { name: "Quad9", value: "9.9.9.9" },
+          { name: "AdGuard", value: "94.140.14.14" },
+          { name: "Turknet", value: "193.192.98.8" },
+          { name: "TTnet", value: "195.175.39.49" },
+          { name: "Turkcell", value: "195.175.39.49" },
+          { name: "Superonline", value: "195.114.66.100" }
+        ]
+      }
+    ]
+  },
+  {
+    name: "traceroute",
+    description: "Show network path to a destination",
+    type: ApplicationCommandType.ChatInput,
+    dm_permission: true,
+    options: [
+      {
+        name: "target",
+        description: "IP address or domain to trace (might take a long time to complete)",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "hops",
+        description: "Maximum number of hops (default: 30)",
+        type: ApplicationCommandOptionType.Integer,
+        required: false,
+        min_value: 1,
+        max_value: 32
+      }
+    ]
+  },
+  {
+    name: "whois",
+    description: "Get domain registration information",
+    type: ApplicationCommandType.ChatInput,
+    dm_permission: true,
+    options: [
+      {
+        name: "domain",
+        description: "Domain to lookup (e.g. example.com)",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      }
+    ]
+  },
+  // Add to slashCommands array
+{
+  name: "stats",
+  description: "Show bot and server statistics",
+  type: ApplicationCommandType.ChatInput,
+  dm_permission: true
+},
+// Add to slashCommands array
+{
+  name: "checkport",
+  description: "Check if specific ports are open on a domain",
+  type: ApplicationCommandType.ChatInput,
+  dm_permission: true,
+  options: [
+    {
+      name: "target",
+      description: "Domain or IP to scan",
+      type: ApplicationCommandOptionType.String,
+      required: true,
+    },
+    {
+      name: "ports",
+      description: "Ports to scan (comma separated, e.g. 80,443,3306)",
+      type: ApplicationCommandOptionType.String,
+      required: true,
+    }
+  ]
+}
+
 
 ];
 
@@ -624,6 +721,264 @@ case "anime":
     });
   }
   break;
-    }
+  case "checkdns":
+  try {
+    await interaction.deferReply();
+    const domain = interaction.options.getString("domain");
+    const provider = interaction.options.getString("provider") || "1.1.1.1";
+    
+    const dns = require('dns');
+    const resolver = new dns.Resolver();
+    resolver.setServers([provider]);
+
+    resolver.resolve4(domain, async (err, addresses) => {
+      if (err) {
+        const dnsEmbed = {
+          title: "DNS Lookup Result",
+          description: `Domain: ${domain}\nProvider: ${provider}`,
+          color: 0xFF0000,
+          fields: [
+            {
+              name: "Status",
+              value: "❌ Domain is blocked or unreachable",
+              inline: true
+            },
+            {
+              name: "Error",
+              value: err.code,
+              inline: true
+            }
+          ],
+          timestamp: new Date(),
+          footer: { text: "DNS Check Service" }
+        };
+        await interaction.editReply({ embeds: [dnsEmbed] });
+      } else {
+        const dnsEmbed = {
+          title: "DNS Lookup Result", 
+          description: `Domain: ${domain}\nProvider: ${provider}`,
+          color: 0x00FF00,
+          fields: [
+            {
+              name: "Status",
+              value: "✅ Domain is accessible",
+              inline: true
+            },
+            {
+              name: "IP Addresses",
+              value: addresses.join('\n'),
+              inline: true
+            }
+          ],
+          timestamp: new Date(),
+          footer: { text: "DNS Check Service" }
+        };
+        await interaction.editReply({ embeds: [dnsEmbed] });
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    await interaction.editReply({
+      content: "Failed to perform DNS lookup. Please check the domain name and try again.",
+      ephemeral: true
+    });
+  }
+  break;
+  case "traceroute":
+  try {
+    await interaction.deferReply();
+    const target = interaction.options.getString("target");
+    const maxHops = interaction.options.getInteger("hops") || 30;
+    
+    const { exec } = require('child_process');
+    // exec(`traceroute -m ${maxHops} ${target}`, async (error, stdout, stderr) => {
+      // windows version
+      exec(`tracert -d -h ${maxHops} ${target}`, async (error, stdout, stderr) => {
+        const traceEmbed = {
+        title: "Traceroute Results",
+        description: `Target: ${target}\nMax Hops: ${maxHops}`,
+        color: 0x3498db,
+        fields: [
+          {
+            name: "Path",
+            value: `\`\`\`${stdout || stderr || 'No response'}\`\`\``
+          }
+        ],
+        timestamp: new Date(),
+        footer: { text: "Network Diagnostics" }
+      };
+      
+      await interaction.editReply({ embeds: [traceEmbed] });
+    });
+  } catch (error) {
+    console.error(error);
+    await interaction.editReply({
+      content: "Failed to perform traceroute. Please check the target and try again.",
+      ephemeral: true
+    });
+  }
+  break;
+  case "whois":
+  try {
+    await interaction.deferReply();
+    const domain = interaction.options.getString("domain");
+    
+    const result = await whois(domain);
+    
+    const whoisEmbed = {
+      title: `WHOIS Lookup: ${domain}`,
+      color: 0x2ecc71,
+      fields: [
+        {
+          name: "Registrar",
+          value: result.registrar || "Not available",
+          inline: true
+        },
+        {
+          name: "Creation Date",
+          value: result.creationDate ? new Date(result.creationDate).toLocaleDateString() : "Not available",
+          inline: true
+        },
+        {
+          name: "Expiration Date",
+          value: result.expirationDate ? new Date(result.expirationDate).toLocaleDateString() : "Not available",
+          inline: true
+        },
+        {
+          name: "Name Servers",
+          value: Array.isArray(result.nameServers) ? result.nameServers.join('\n') : "Not available"
+        },
+        {
+          name: "Status",
+          value: Array.isArray(result.status) ? result.status.join('\n') : (result.status || "Not available")
+        }
+      ],
+      timestamp: new Date(),
+      footer: { text: "Domain Information Service" }
+    };
+    
+    await interaction.editReply({ embeds: [whoisEmbed] });
+  } catch (error) {
+    console.error(error);
+    await interaction.editReply({
+      content: "Failed to fetch WHOIS information. Please check the domain name and try again.",
+      ephemeral: true
+    });
+  }
+  break;
+  case "stats":
+  try {
+    await interaction.deferReply();
+    const os = require('os');
+    
+    // Calculate uptime
+    const uptime = process.uptime();
+    const days = Math.floor(uptime / 86400);
+    const hours = Math.floor((uptime % 86400) / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    
+    // Get system info
+    const memUsage = process.memoryUsage();
+    const cpuLoad = os.loadavg();
+    
+    const statsEmbed = {
+      title: "Bot Statistics",
+      color: 0x7289DA,
+      fields: [
+        {
+          name: "Bot Info",
+          value: [
+            `**Servers:** ${client.guilds.cache.size}`,
+            `**Users:** ${client.users.cache.size}`,
+            `**Channels:** ${client.channels.cache.size}`,
+            `**Commands:** ${slashCommands.length}`
+          ].join('\n'),
+          inline: true
+        },
+        {
+          name: "System Info",
+          value: [
+            `**Platform:** ${os.platform()}`,
+            `**Memory Usage:** ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+            `**CPU Load:** ${cpuLoad[0].toFixed(2)}%`,
+            `**Node.js:** ${process.version}`
+          ].join('\n'),
+          inline: true
+        },
+        {
+          name: "Uptime",
+          value: `${days}d ${hours}h ${minutes}m`,
+          inline: true
+        }
+      ],
+      timestamp: new Date(),
+      footer: { text: "blahaj-srv" }
+    };
+    
+    await interaction.editReply({ embeds: [statsEmbed] });
+  } catch (error) {
+    console.error(error);
+    await interaction.editReply({
+      content: "Failed to fetch statistics.",
+      ephemeral: true
+    });
+  }
+  break;
+  case "checkport":
+  try {
+    await interaction.deferReply();
+    const target = interaction.options.getString("target");
+    const ports = interaction.options.getString("ports").split(",").map(p => parseInt(p.trim()));
+    const net = require('net');
+
+    const checkPort = (port) => {
+      return new Promise((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(2000); // 2 second timeout
+        
+        socket.on('connect', () => {
+          socket.destroy();
+          resolve({ port, status: 'open' });
+        });
+        
+        socket.on('timeout', () => {
+          socket.destroy();
+          resolve({ port, status: 'closed' });
+        });
+        
+        socket.on('error', () => {
+          socket.destroy();
+          resolve({ port, status: 'closed' });
+        });
+        
+        socket.connect(port, target);
+      });
+    };
+
+    const results = await Promise.all(ports.map(port => checkPort(port)));
+    
+    const scanEmbed = {
+      title: `Port Scan Results for ${target}`,
+      color: 0x00ff00,
+      fields: results.map(result => ({
+        name: `Port ${result.port}`,
+        value: result.status === 'open' ? '🟢 Open' : '🔴 Closed',
+        inline: true
+      })),
+      timestamp: new Date(),
+      footer: { text: "Network Security Scanner" }
+    };
+    
+    await interaction.editReply({ embeds: [scanEmbed] });
+  } catch (error) {
+    console.error(error);
+    await interaction.editReply({
+      content: "Failed to perform port scan. Please check the target and port numbers.",
+      ephemeral: true
+    });
+  }
+  break;
+
+}
 }});
 client.login(process.env.DISCORD_TOKEN);
