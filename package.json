@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "pm2 start api/status/server.js --name status-service-api",
-    "restart": "pm2 restart status-service-api"
+    "start": "pm2 start api/status/server.js --name api_status-server",
+    "restart": "pm2 restart api_status-server"
   },
   "repository": {
     "type": "git",
