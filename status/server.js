@@ -10,16 +10,16 @@ const PORT = 2589;
 const key = "/etc/letsencrypt/live/blahaj.tr/privkey.pem"
 const cert = "/etc/letsencrypt/live/blahaj.tr/fullchain.pem"
 const REMOTE_SERVERS = [
-    "blahaj.tr",
-    "xargana.com",
-    "srv.xargana.com"
+    { name: "blahaj.tr", host: "blahaj.tr" },
+    { name: "xargana.com", host: "xargana.com" },
+    { name: "home server", host: "31.223.36.208" }
 ]; 
 
 const CHECK_INTERVAL = 5 * 1000;
 
 let serversStatus = {};
 REMOTE_SERVERS.forEach(server => {
-    serversStatus[server] = {
+    serversStatus[server.name] = {
         online: false,
         lastChecked: null,
         responseTime: null,
@@ -32,14 +32,14 @@ async function checkServers() {
     for (const server of REMOTE_SERVERS) {
         const startTime = Date.now();
         try {
-            const res = await ping.promise.probe(server);
-            serversStatus[server].online = res.alive;
-            serversStatus[server].responseTime = res.time;
+            const res = await ping.promise.probe(server.host);
+            serversStatus[server.name].online = res.alive;
+            serversStatus[server.name].responseTime = res.time;
         } catch (error) {
-            serversStatus[server].online = false;
-            serversStatus[server].responseTime = null;
+            serversStatus[server.name].online = false;
+            serversStatus[server.name].responseTime = null;
         }
-        serversStatus[server].lastChecked = new Date().toISOString();
+        serversStatus[server.name].lastChecked = new Date().toISOString();
     }
 }
 
