@@ -821,17 +821,15 @@ case "anime":
       const maxHops = interaction.options.getInteger("hops") || 16;
       
       const { spawn } = require('child_process');
-      const tracepath = spawn('traceroute', ['-q', '1', '-d', '-m', `${maxHops}`, target, " | awk '{print $1, $2, $3}'"]);
+      // Simplify the command and avoid piping through awk which might cause issues
+      const tracepath = spawn('traceroute', ['-q', '1', '-d', '-m', `${maxHops}`, target]);
       
       let output = '';
       
       tracepath.stdout.on('data', async (data) => {
-        const newData = data.toString()
-          .split('\n')
-          .map(line => line.trim())
-          .join('\n');
-          
-        output += newData;
+        // Simply append the data without additional processing
+        output += data.toString();
+        
         const traceEmbed = {
           title: `Path to ${target}`,
           description: `\`\`\`\n${output}\`\`\``,
@@ -842,11 +840,11 @@ case "anime":
         
         await interaction.editReply({ embeds: [traceEmbed] });
       });
-  
+    
       tracepath.stderr.on('data', (data) => {
         console.log(`stderr: ${data}`);
       });
-  
+    
       tracepath.on('close', async () => {
         const finalEmbed = {
           title: `Path to ${target} - Complete`,
