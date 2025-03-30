@@ -11,6 +11,19 @@ const {
 const axios = require("axios");
 const ping = require("ping");
 const whois = require('whois-json');
+const fs = require('fs');
+const path = require('path');
+
+const tempDir = path.join(__dirname, '../temp');
+if (fs.existsSync(tempDir)) {
+  console.log("Cleaning up temp directory...");
+  const files = fs.readdirSync(tempDir);
+  for (const file of files) {
+    fs.unlinkSync(path.join(tempDir, file));
+  }
+} else {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
 
 const client = new Client({
     intents: [
@@ -256,7 +269,117 @@ const globalCommands = [
         required: true,
       }
     ]
-  }
+  },
+  {
+    name: "wikipedia",
+    description: "Get a summary of a Wikipedia article",
+    type: ApplicationCommandType.ChatInput,
+    dm_permission: true,
+    options: [
+      {
+        name: "query",
+        description: "The topic to search for on Wikipedia",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "language",
+        description: "Wikipedia language (default: en)",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        choices: [
+          { name: "English", value: "en" },
+          { name: "Spanish", value: "es" },
+          { name: "French", value: "fr" },
+          { name: "German", value: "de" },
+          { name: "Russian", value: "ru" },
+          { name: "Japanese", value: "ja" },
+          { name: "Chinese", value: "zh" },
+          { name: "Turkish", value: "tr" }
+        ]
+      }
+    ],
+  },
+  {
+    name: "urban",
+    description: "Look up a term on Urban Dictionary",
+    type: ApplicationCommandType.ChatInput,
+    dm_permission: true,
+    options: [
+      {
+        name: "term",
+        description: "The slang term to look up",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "random",
+        description: "Get a random definition instead",
+        type: ApplicationCommandOptionType.Boolean,
+        required: false
+      }
+    ],
+  },
+  {
+    name: "currency",
+    description: "Convert between currencies using real-time exchange rates",
+    type: ApplicationCommandType.ChatInput,
+    dm_permission: true,
+    options: [
+      {
+        name: "amount",
+        description: "Amount to convert",
+        type: ApplicationCommandOptionType.Number,
+        required: true,
+      },
+      {
+        name: "from",
+        description: "Source currency code (e.g., USD)",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "to",
+        description: "Target currency code (e.g., EUR)",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      }
+    ],
+  },
+  {
+    name: "hash",
+    description: "Generate hash of text or file (up to 500MB)",
+    type: ApplicationCommandType.ChatInput,
+    dm_permission: true,
+    options: [
+      {
+        name: "algorithm",
+        description: "Hash algorithm to use",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        choices: [
+          { name: "MD5", value: "md5" },
+          { name: "SHA-1", value: "sha1" },
+          { name: "SHA-256", value: "sha256" },
+          { name: "SHA-512", value: "sha512" },
+          { name: "SHA3-256", value: "sha3-256" },
+          { name: "SHA3-512", value: "sha3-512" }
+        ]
+      },
+      {
+        name: "text",
+        description: "Text to hash (if not uploading a file)",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      },
+      {
+        name: "file",
+        description: "File to hash (up to 500MB)",
+        type: ApplicationCommandOptionType.Attachment,
+        required: false,
+      }
+    ],
+  } 
 ];
 
 // Commands that only make sense in a guild context
@@ -950,7 +1073,98 @@ client.on("interactionCreate", async (interaction) => {
               ephemeral: true
             });
           }
-          break;  
+          break; 
+          
+          case "wikipedia":
+            try {
+              await interaction.deferReply();
+              const query = interaction.options.getString("query");
+              const language = interaction.options.getString("language") || "en";
+              
+              // Import the wikipedia package
+              const wikipedia = require('wikipedia');
+              
+              // Set the language
+              wikipedia.setLang(language);
+              
+              // Search for the query
+              const searchResults = await wikipedia.search(query);
+              
+              if (!searchResults.results || searchResults.results.length === 0) {
+                await interaction.editReply({
+                  content: `No results found for "${query}" on Wikipedia.`,
+                  ephemeral: true
+                });
+                return;
+              }
+              
+              // Get the first result
+              const page = await wikipedia.page(searchResults.results[0].title);
+              
+              // Get summary and basic info
+              const summary = await page.summary();
+              
+              // Create a rich embed
+              const wikiEmbed = {
+                title: summary.title,
+                url: summary.content_urls.desktop.page,
+                description: summary.extract.length > 1000 
+                  ? summary.extract.substring(0, 1000) + "..." 
+                  : summary.extract,
+                color: 0x0099ff,
+                thumbnail: summary.thumbnail 
+                  ? { url: summary.thumbnail.source } 
+                  : null,
+                fields: [
+                  {
+                    name: "Page ID",
+                    value: summary.pageid.toString(),
+                    inline: true
+                  },
+                  {
+                    name: "Language",
+                    value: language.toUpperCase(),
+                    inline: true
+                  }
+                ],
+                footer: {
+                  text: "Powered by Wikipedia",
+                  icon_url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png"
+                },
+                timestamp: new Date()
+              };
+              
+              // Add a related articles field if we have other search results
+              if (searchResults.results.length > 1) {
+                const relatedArticles = searchResults.results
+                  .slice(1, 4)  // Get 3 related articles
+                  .map(result => `[${result.title}](https://${language}.wikipedia.org/wiki/${encodeURIComponent(result.title.replace(/ /g, '_'))})`)
+                  .join('\n');
+                
+                wikiEmbed.fields.push({
+                  name: "Related Articles",
+                  value: relatedArticles
+                });
+              }
+              
+              await interaction.editReply({ embeds: [wikiEmbed] });
+            } catch (error) {
+              console.error(error);
+              
+              // Handle specific Wikipedia errors
+              if (error.message.includes("No article found")) {
+                await interaction.editReply({ 
+                  content: "Couldn't find a specific Wikipedia article with that title. Try a different search term.",
+                  ephemeral: true 
+                });
+              } else {
+                await interaction.editReply({ 
+                  content: "Error fetching Wikipedia data. Please try again later.",
+                  ephemeral: true 
+                });
+              }
+            }
+            break;          
 
         case "whois":
           try {
@@ -1113,9 +1327,384 @@ client.on("interactionCreate", async (interaction) => {
               ephemeral: true
             });
           }
-          break;
-
-        default:
+            break;
+          
+          case "urban":
+            try {
+              await interaction.deferReply();
+              const term = interaction.options.getString("term");
+              const isRandom = interaction.options.getBoolean("random") || false;
+              
+              // API endpoint
+              const endpoint = isRandom 
+                ? "https://api.urbandictionary.com/v0/random" 
+                : `https://api.urbandictionary.com/v0/define?term=${encodeURIComponent(term)}`;
+              
+              const response = await axios.get(endpoint);
+              
+              if (!response.data.list || response.data.list.length === 0) {
+                await interaction.editReply({
+                  content: `No definitions found for "${term}" on Urban Dictionary.`,
+                  ephemeral: true
+                });
+                return;
+              }
+              
+              // Sort by thumbs up count if there are multiple definitions
+              const definitions = response.data.list.sort((a, b) => b.thumbs_up - a.thumbs_up);
+              const definition = definitions[0];
+              
+              // Clean up the text by replacing square brackets with formatted links
+              let cleanDefinition = definition.definition.replace(/\[([^\]]+)\]/g, '**$1**');
+              let cleanExample = definition.example.replace(/\[([^\]]+)\]/g, '**$1**');
+              
+              // Truncate if too long
+              if (cleanDefinition.length > 1024) {
+                cleanDefinition = cleanDefinition.substring(0, 1021) + '...';
+              }
+              
+              if (cleanExample.length > 1024) {
+                cleanExample = cleanExample.substring(0, 1021) + '...';
+              }
+              
+              // Create a rich embed
+              const urbanEmbed = {
+                title: isRandom ? definition.word : term,
+                url: definition.permalink,
+                color: 0xEFFF00, // Urban Dictionary yellow
+                fields: [
+                  {
+                    name: "Definition",
+                    value: cleanDefinition || "No definition provided"
+                  }
+                ],
+                footer: {
+                  text: `👍 ${definition.thumbs_up} | 👎 ${definition.thumbs_down} | Written by ${definition.author}`,
+                  icon_url: "https://i.imgur.com/VFXr0ID.jpg"
+                },
+                timestamp: new Date(definition.written_on)
+              };
+              
+              // Add example if it exists
+              if (cleanExample && cleanExample.trim().length > 0) {
+                urbanEmbed.fields.push({
+                  name: "Example",
+                  value: cleanExample
+                });
+              }
+              
+              // Add related definitions if there are more
+              if (definitions.length > 1) {
+                const relatedCount = Math.min(definitions.length - 1, 3);
+                urbanEmbed.fields.push({
+                  name: `${relatedCount} More Definition${relatedCount > 1 ? 's' : ''}`,
+                  value: `This term has ${definitions.length} definitions. Use the link above to see them all.`
+                });
+              }
+              
+              // Add a warning that content might be offensive
+              const warningMessage = "⚠️ **Note:** Urban Dictionary contains user-submitted content that may be offensive or inappropriate.";
+              
+              await interaction.editReply({ 
+                content: warningMessage,
+                embeds: [urbanEmbed] 
+              });
+            } catch (error) {
+              console.error(error);
+              await interaction.editReply({ 
+                content: "Error fetching Urban Dictionary definition. Please try again later.",
+                ephemeral: true 
+              });
+            }
+            break;
+            case "currency":
+              try {
+                await interaction.deferReply();
+                const amount = interaction.options.getNumber("amount");
+                const fromCurrency = interaction.options.getString("from").toUpperCase();
+                const toCurrency = interaction.options.getString("to").toUpperCase();
+                
+                // Check if API key is configured
+                if (!process.env.EXCHANGE_RATE_API_KEY) {
+                  await interaction.editReply({ 
+                    content: "Exchange Rate API key not configured. Please add EXCHANGE_RATE_API_KEY to your environment variables.",
+                    ephemeral: true 
+                  });
+                  return;
+                }
+                
+                // Validate amount
+                if (amount <= 0) {
+                  await interaction.editReply({
+                    content: "Please provide a positive amount to convert.",
+                    ephemeral: true
+                  });
+                  return;
+                }
+                
+                // Fetch exchange rates
+                const apiUrl = `https://v6.exchangerate-api.com/v6/${process.env.EXCHANGE_RATE_API_KEY}/latest/${fromCurrency}`;
+                const response = await axios.get(apiUrl);
+                
+                // Check if the source currency is valid
+                if (response.data.result === "error") {
+                  await interaction.editReply({
+                    content: `Error: ${response.data.error-type || "Invalid request"}. Please check your currency codes.`,
+                    ephemeral: true
+                  });
+                  return;
+                }
+                
+                // Check if target currency exists in the response
+                if (!response.data.conversion_rates[toCurrency]) {
+                  await interaction.editReply({
+                    content: `Could not find exchange rate for ${toCurrency}. Please check your currency code.`,
+                    ephemeral: true
+                  });
+                  return;
+                }
+                
+                // Calculate the converted amount
+                const rate = response.data.conversion_rates[toCurrency];
+                const convertedAmount = amount * rate;
+                
+                // Format numbers with proper separators and decimals
+                const formatNumber = (num) => {
+                  return new Intl.NumberFormat('en-US', { 
+                    minimumFractionDigits: 2, 
+                    maximumFractionDigits: 4 
+                  }).format(num);
+                };
+                
+                // Get currency information to display symbols
+                const currencyInfo = {
+                  USD: { symbol: '$', name: 'US Dollar' },
+                  EUR: { symbol: '€', name: 'Euro' },
+                  GBP: { symbol: '£', name: 'British Pound' },
+                  JPY: { symbol: '¥', name: 'Japanese Yen' },
+                  TRY: { symbol: '₺', name: 'Turkish Lira' },
+                  // Add more currencies as needed
+                };
+                
+                const fromCurrencyInfo = currencyInfo[fromCurrency] || { symbol: '', name: fromCurrency };
+                const toCurrencyInfo = currencyInfo[toCurrency] || { symbol: '', name: toCurrency };
+                
+                // Create a rich embed
+                const conversionEmbed = {
+                  title: "Currency Conversion",
+                  color: 0x4CAF50, // Green
+                  fields: [
+                    {
+                      name: "From",
+                      value: `${fromCurrencyInfo.symbol} ${formatNumber(amount)} ${fromCurrency} (${fromCurrencyInfo.name})`,
+                      inline: false
+                    },
+                    {
+                      name: "To",
+                      value: `${toCurrencyInfo.symbol} ${formatNumber(convertedAmount)} ${toCurrency} (${toCurrencyInfo.name})`,
+                      inline: false
+                    },
+                    {
+                      name: "Exchange Rate",
+                      value: `1 ${fromCurrency} = ${formatNumber(rate)} ${toCurrency}`,
+                      inline: true
+                    },
+                    {
+                      name: "Last Updated",
+                      value: new Date(response.data.time_last_update_unix * 1000).toLocaleString(),
+                      inline: true
+                    }
+                  ],
+                  footer: {
+                    text: "Powered by ExchangeRate-API"
+                  },
+                  timestamp: new Date()
+                };
+                
+                await interaction.editReply({ embeds: [conversionEmbed] });
+              } catch (error) {
+                console.error(error);
+                const errorMessage = error.response?.data?.error || "Error fetching exchange rates. Please try again later.";
+                await interaction.editReply({ 
+                  content: errorMessage,
+                  ephemeral: true 
+                });
+              }
+              break;  
+              case "hash":
+                try {
+                  await interaction.deferReply();
+                  const algorithm = interaction.options.getString("algorithm");
+                  const text = interaction.options.getString("text");
+                  const file = interaction.options.getAttachment("file");
+                  
+                  // Validate that either text or file is provided
+                  if (!text && !file) {
+                    await interaction.editReply({
+                      content: "Please provide either text or a file to hash.",
+                      ephemeral: true
+                    });
+                    return;
+                  }
+                  
+                  // If both are provided, prioritize the file
+                  if (text && file) {
+                    await interaction.followUp({
+                      content: "Both text and file were provided. Processing the file and ignoring the text.",
+                      ephemeral: true
+                    });
+                  }
+                  
+                  // For text input, generate hash directly
+                  if (text && !file) {
+                    const crypto = require('crypto');
+                    const hash = crypto.createHash(algorithm).update(text).digest('hex');
+                    
+                    const hashEmbed = {
+                      title: `${algorithm.toUpperCase()} Hash`,
+                      description: "Text hash generated successfully",
+                      color: 0x3498db,
+                      fields: [
+                        {
+                          name: "Input Text",
+                          value: text.length > 1024 ? text.substring(0, 1021) + "..." : text
+                        },
+                        {
+                          name: "Hash",
+                          value: "```\n" + hash + "\n```"
+                        }
+                      ],
+                      timestamp: new Date(),
+                      footer: { text: `Algorithm: ${algorithm.toUpperCase()}` }
+                    };
+                    
+                    await interaction.editReply({ embeds: [hashEmbed] });
+                    return;
+                  }
+                  
+                  // For file input, download and hash the file
+                  if (file) {
+                    // Check file size (500MB limit)
+                    const maxSize = 500 * 1024 * 1024; // 500MB in bytes
+                    if (file.size > maxSize) {
+                      await interaction.editReply({
+                        content: `File is too large. Maximum size is 500MB. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`,
+                        ephemeral: true
+                      });
+                      return;
+                    }
+                    
+                    // If file is larger than 25MB, warn the user it might take a while
+                    if (file.size > 25 * 1024 * 1024) {
+                      await interaction.editReply({
+                        content: `Processing a ${(file.size / (1024 * 1024)).toFixed(2)}MB file. This might take a while...`
+                      });
+                    }
+                    
+                    // Process the file using streams for efficiency
+                    const fs = require('fs');
+                    const path = require('path');
+                    const crypto = require('crypto');
+                    const stream = require('stream');
+                    const { promisify } = require('util');
+                    const pipeline = promisify(stream.pipeline);
+                    const axios = require('axios');
+                    
+                    // Create a temporary file path
+                    const tempDir = path.join(__dirname, '../temp');
+                    if (!fs.existsSync(tempDir)) {
+                      fs.mkdirSync(tempDir, { recursive: true });
+                    }
+                    
+                    const tempFile = path.join(tempDir, `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`);
+                    
+                    try {
+                      // Download the file
+                      const writer = fs.createWriteStream(tempFile);
+                      const response = await axios({
+                        method: 'GET',
+                        url: file.url,
+                        responseType: 'stream'
+                      });
+                      
+                      await pipeline(response.data, writer);
+                      
+                      // After download completes, hash the file with progress updates
+                      const fileSize = fs.statSync(tempFile).size;
+                      const hash = crypto.createHash(algorithm);
+                      const input = fs.createReadStream(tempFile);
+                      
+                      let processedBytes = 0;
+                      let lastProgressUpdate = Date.now();
+                      
+                      input.on('data', (chunk) => {
+                        hash.update(chunk);
+                        processedBytes += chunk.length;
+                        
+                        // Update progress every 3 seconds for files larger than 50MB
+                        const now = Date.now();
+                        if (fileSize > 50 * 1024 * 1024 && now - lastProgressUpdate > 3000) {
+                          const progress = (processedBytes / fileSize * 100).toFixed(2);
+                          interaction.editReply({
+                            content: `Processing file: ${progress}% complete...`
+                          }).catch(console.error);
+                          lastProgressUpdate = now;
+                        }
+                      });
+                      
+                      // Wait for the hash to complete
+                      const hashHex = await new Promise((resolve, reject) => {
+                        input.on('end', () => resolve(hash.digest('hex')));
+                        input.on('error', reject);
+                      });
+                      
+                      // Clean up the temp file
+                      fs.unlinkSync(tempFile);
+                      
+                      // Create the response embed
+                      const fileExtension = path.extname(file.name).toLowerCase();
+                      const hashEmbed = {
+                        title: `${algorithm.toUpperCase()} Hash Generated`,
+                        description: "File hash calculated successfully",
+                        color: 0x00ff00,
+                        fields: [
+                          {
+                            name: "File",
+                            value: `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`
+                          },
+                          {
+                            name: "Hash",
+                            value: "```\n" + hashHex + "\n```"
+                          }
+                        ],
+                        timestamp: new Date(),
+                        footer: { text: `Algorithm: ${algorithm.toUpperCase()}` }
+                      };
+                      
+                      await interaction.editReply({ embeds: [hashEmbed] });
+                    } catch (fileError) {
+                      console.error("File processing error:", fileError);
+                      
+                      // Clean up temp file if it exists
+                      if (fs.existsSync(tempFile)) {
+                        fs.unlinkSync(tempFile);
+                      }
+                      
+                      await interaction.editReply({
+                        content: "Error processing file. The file might be inaccessible or corrupted.",
+                        ephemeral: true
+                      });
+                    }
+                  }
+                } catch (error) {
+                  console.error("Hash command error:", error);
+                  await interaction.editReply({ 
+                    content: "Error generating hash. Please try again with a smaller file or different input.",
+                    ephemeral: true 
+                  });
+                }
+                break;                        
+          default:
           await interaction.reply({ 
             content: `Command '${interaction.commandName}' not implemented yet.`, 
             ephemeral: true 
