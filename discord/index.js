@@ -821,7 +821,7 @@ case "anime":
       const maxHops = interaction.options.getInteger("hops") || 30;
       
       const { spawn } = require('child_process');
-      const traceroute = spawn('traceroute', ['-n', '-m', maxHops, target]); // Added -n flag for numeric output
+      const traceroute = spawn('tracepath', ['-4', '-m', maxHops, target]); 
       
       let output = '';
       
