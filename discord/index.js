@@ -821,7 +821,7 @@ case "anime":
       const maxHops = interaction.options.getInteger("hops") || 30;
       
       const { exec } = require('child_process');
-      exec(`traceroute -m ${maxHops} ${target}`, async (error, stdout, stderr) => {
+      exec(`tracepath -4 -m ${maxHops} ${target}`, async (error, stdout, stderr) => {
         const output = stdout || stderr || 'No response';
         
         const traceEmbed = {
