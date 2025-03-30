@@ -837,11 +837,11 @@ case "anime":
         
         output += newData;
         const traceEmbed = {
-          title: `📍 Trace to ${target}`,
+          title: `Trace to ${target}`,
           description: `\`\`\`\n${output}\`\`\``,
           color: 0x3498db,
           timestamp: new Date(),
-          footer: { text: "🔍 Tracing..." }
+          footer: { text: "Tracing..." }
         };
         
         await interaction.editReply({ embeds: [traceEmbed] });
@@ -849,7 +849,7 @@ case "anime":
   
       traceroute.on('close', async () => {
         const finalEmbed = {
-          title: `📍 Trace to ${target} - Complete`,
+          title: `Trace to ${target} - Complete`,
           description: `\`\`\`\n${output}\`\`\``,
           color: 0x00ff00,
           timestamp: new Date(),
