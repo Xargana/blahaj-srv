@@ -821,30 +821,39 @@ case "anime":
       const maxHops = interaction.options.getInteger("hops") || 30;
       
       const { spawn } = require('child_process');
-      const traceroute = spawn('traceroute', ['-m', maxHops, target]);
+      const traceroute = spawn('traceroute', ['-n', '-m', maxHops, target]); // Added -n flag for numeric output
       
       let output = '';
       
       traceroute.stdout.on('data', async (data) => {
-        output += data.toString();
+        // Process each line to make it more compact
+        const newData = data.toString()
+          .split('\n')
+          .map(line => {
+            // Remove extra spaces and asterisks
+            return line.replace(/\s+/g, ' ').replace(/\* \* \*/g, '*');
+          })
+          .join('\n');
+        
+        output += newData;
         const traceEmbed = {
-          title: "Traceroute Results (Live)",
-          description: `Target: ${target}\nMax Hops: ${maxHops}\n\n\`\`\`\n${output}\`\`\``,
+          title: `Trace to ${target}`,
+          description: `\`\`\`\n${output}\`\`\``,
           color: 0x3498db,
           timestamp: new Date(),
-          footer: { text: "Network Diagnostics" }
+          footer: { text: "Tracing..." }
         };
         
         await interaction.editReply({ embeds: [traceEmbed] });
       });
   
-      traceroute.on('close', async (code) => {
+      traceroute.on('close', async () => {
         const finalEmbed = {
-          title: "Traceroute Complete",
-          description: `Target: ${target}\nMax Hops: ${maxHops}\n\n\`\`\`\n${output}\`\`\``,
+          title: `Trace to ${target} - Complete`,
+          description: `\`\`\`\n${output}\`\`\``,
           color: 0x00ff00,
           timestamp: new Date(),
-          footer: { text: "Network Diagnostics" }
+          footer: { text: "✅ Trace complete" }
         };
         
         await interaction.editReply({ embeds: [finalEmbed] });
@@ -856,7 +865,7 @@ case "anime":
         ephemeral: true
       });
     }
-    break;
+    break;  
   case "whois":
   try {
     await interaction.deferReply();
