@@ -396,7 +396,7 @@ client.once("ready", async () => {
       }
     ],
     footer: {
-      text: "blahaj-srv"
+      text: "blahaj.tr"
     }
   };
   
@@ -442,13 +442,28 @@ client.on("interactionCreate", async (interaction) => {
             });
             return;
           }
-          await interaction.editReply({ content: `Ping: ${pingResult.time}ms` });
+          const pingEmbed = {
+            title: "Ping Results",
+            description: `Results for IP: ${ip}`,
+            color: 0x00ff00,
+            fields: [
+              {
+                name: "Response Time",
+                value: `${pingResult.time}ms`,
+                inline: true
+              }
+            ],
+            timestamp: new Date(),
+            footer: {
+              text: "Ping Command"
+            }
+          };
+          await interaction.editReply({ embeds: [pingEmbed] });
         } catch (error) {
           console.error(error);
           await interaction.editReply({ content: "Failed to ping.", ephemeral: true });
         }
         break;
-
       case "server_status":
         try {
           const response = await axios.get("https://blahaj.tr:2589/status");
@@ -460,19 +475,34 @@ client.on("interactionCreate", async (interaction) => {
             });
           } else {
             let formattedResponse = "";
+            const fields = [];
             for (const [server, data] of Object.entries(response.data)) {
-              const status = data.online ? "online" : "offline";
+              const status = data.online ? "🟢 Online" : "🔴 Offline";
               const responseTime = data.responseTime.toFixed(2);
-              formattedResponse += `${server}: ${status}, response time: ${responseTime}ms\n`;
+              fields.push({
+                name: server,
+                value: `Status: ${status}\nResponse Time: ${responseTime}ms`,
+                inline: true
+              });
             }
-            await interaction.reply({ content: formattedResponse });
+            
+            const statusEmbed = {
+              title: "Server Status",
+              color: 0x00ff00,
+              fields: fields,
+              timestamp: new Date(),
+              footer: {
+                text: "Server Status Command"
+              }
+            };
+            
+            await interaction.reply({ embeds: [statusEmbed] });
           }
         } catch (error) {
           console.error(error);
           await interaction.reply({ content: "Failed to get status.", ephemeral: true });
         }
-        break;
-        
+        break;        
       case "cody":
         try {
           await interaction.deferReply();
@@ -796,7 +826,7 @@ case "anime":
         
         const traceEmbed = {
           title: "Traceroute Results",
-          description: `Target: ${target}\nMax Hops: ${maxHops}\n\n\`\`\`\n${output}\`\`\``,
+          description: `Target: ${target}\nMax Hops: ${maxHops}\n\`\`\`${output}\`\`\``,
           color: 0x3498db,
           timestamp: new Date(),
           footer: { text: "Network Diagnostics" }
@@ -811,8 +841,7 @@ case "anime":
         ephemeral: true
       });
     }
-    break;  
-  case "whois":
+    break;    case "whois":
   try {
     await interaction.deferReply();
     const domain = interaction.options.getString("domain");
@@ -960,7 +989,7 @@ case "anime":
         inline: true
       })),
       timestamp: new Date(),
-      footer: { text: "Network Security Scanner" }
+      footer: { text: "Port Check" }
     };
     
     await interaction.editReply({ embeds: [scanEmbed] });
