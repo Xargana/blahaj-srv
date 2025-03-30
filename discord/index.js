@@ -821,23 +821,19 @@ case "anime":
       const maxHops = interaction.options.getInteger("hops") || 30;
       
       const { spawn } = require('child_process');
-      const traceroute = spawn('tracepath', ['-4', '-m', maxHops, target]); 
+      const tracepath = spawn('tracepath', ['-4', target]); // tracepath with numeric output
       
       let output = '';
       
-      traceroute.stdout.on('data', async (data) => {
-        // Process each line to make it more compact
+      tracepath.stdout.on('data', async (data) => {
         const newData = data.toString()
           .split('\n')
-          .map(line => {
-            // Remove extra spaces and asterisks
-            return line.replace(/\s+/g, ' ').replace(/\* \* \*/g, '*');
-          })
+          .map(line => line.trim())
           .join('\n');
         
         output += newData;
         const traceEmbed = {
-          title: `Trace to ${target}`,
+          title: `Path to ${target}`,
           description: `\`\`\`\n${output}\`\`\``,
           color: 0x3498db,
           timestamp: new Date(),
@@ -847,9 +843,9 @@ case "anime":
         await interaction.editReply({ embeds: [traceEmbed] });
       });
   
-      traceroute.on('close', async () => {
+      tracepath.on('close', async () => {
         const finalEmbed = {
-          title: `Trace to ${target} - Complete`,
+          title: `Path to ${target} - Complete`,
           description: `\`\`\`\n${output}\`\`\``,
           color: 0x00ff00,
           timestamp: new Date(),
@@ -861,11 +857,11 @@ case "anime":
     } catch (error) {
       console.error(error);
       await interaction.editReply({
-        content: "Failed to perform traceroute. Please check the target and try again.",
+        content: "Failed to trace path. Please check the target and try again.",
         ephemeral: true
       });
     }
-    break;  
+    break;    
   case "whois":
   try {
     await interaction.deferReply();
