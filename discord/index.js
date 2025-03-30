@@ -821,18 +821,15 @@ case "anime":
       const maxHops = interaction.options.getInteger("hops") || 16;
       
       const { spawn } = require('child_process');
-      // Use shell option to properly handle the pipe
-      const tracepath = spawn('traceroute -q 1 -d -m ' + maxHops + ' ' + target + ' | awk \'{print $1, $2, $3}\'', {
-        shell: true
-      });
+      const tracepath = spawn('traceroute', ['-q', '1', '-d', '-m', `${maxHops}`, target]);
       
       let output = '';
       
       tracepath.stdout.on('data', async (data) => {
         const newData = data.toString()
-            .split('\n')
-            .map(line => line.trim())
-            .join('\n');
+          .split('\n')
+          .map(line => line.trim())
+          .join('\n');
             
         output += newData;
         const traceEmbed = {
