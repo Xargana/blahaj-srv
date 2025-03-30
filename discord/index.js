@@ -821,7 +821,10 @@ case "anime":
       const maxHops = interaction.options.getInteger("hops") || 16;
       
       const { spawn } = require('child_process');
-      const tracepath = spawn('traceroute', ['-q', '1', '-d', '-m', `${maxHops}`, target, " | awk '{print $1, $2, $3}'"]);
+      // Use shell option to properly handle the pipe
+      const tracepath = spawn('traceroute -q 1 -d -m ' + maxHops + ' ' + target + ' | awk \'{print $1, $2, $3}\'', {
+        shell: true
+      });
       
       let output = '';
       
@@ -865,7 +868,7 @@ case "anime":
         ephemeral: true
       });
     }
-    break;   
+    break;  
   case "whois":
   try {
     await interaction.deferReply();
