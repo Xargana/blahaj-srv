@@ -818,10 +818,10 @@ case "anime":
     try {
       await interaction.deferReply();
       const target = interaction.options.getString("target");
-      const maxHops = interaction.options.getInteger("hops") || 30;
+      const maxHops = interaction.options.getInteger("hops") || 16;
       
       const { spawn } = require('child_process');
-      const tracepath = spawn('tracepath', ['-4', target]); // tracepath with numeric output
+      const tracepath = spawn('tracepath', ['-4', `-m ${maxHops}`, target]);
       
       let output = '';
       
