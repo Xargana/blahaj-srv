@@ -821,15 +821,15 @@ case "anime":
       const maxHops = interaction.options.getInteger("hops") || 16;
       
       const { spawn } = require('child_process');
-      const tracepath = spawn('traceroute', ['-q', '1', '-d', '-m', `${maxHops}`, target]);
+      const tracepath = spawn('traceroute', ['-q', '1', '-d', '-m', `${maxHops}`, target, " | awk '{print $1, $2, $3}'"]);
       
       let output = '';
       
       tracepath.stdout.on('data', async (data) => {
         const newData = data.toString()
-          .split('\n')
-          .map(line => line.trim())
-          .join('\n');
+            .split('\n')
+            .map(line => line.trim())
+            .join('\n');
             
         output += newData;
         const traceEmbed = {
@@ -865,7 +865,7 @@ case "anime":
         ephemeral: true
       });
     }
-    break;  
+    break;   
   case "whois":
   try {
     await interaction.deferReply();
