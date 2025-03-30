@@ -820,19 +820,34 @@ case "anime":
       const target = interaction.options.getString("target");
       const maxHops = interaction.options.getInteger("hops") || 30;
       
-      const { exec } = require('child_process');
-      exec(`tracepath -4 -m ${maxHops} ${target}`, async (error, stdout, stderr) => {
-        const output = stdout || stderr || 'No response';
-        
+      const { spawn } = require('child_process');
+      const traceroute = spawn('traceroute', ['-m', maxHops, target]);
+      
+      let output = '';
+      
+      traceroute.stdout.on('data', async (data) => {
+        output += data.toString();
         const traceEmbed = {
-          title: "Traceroute Results",
-          description: `Target: ${target}\nMax Hops: ${maxHops}\n\`\`\`${output}\`\`\``,
+          title: "Traceroute Results (Live)",
+          description: `Target: ${target}\nMax Hops: ${maxHops}\n\n\`\`\`\n${output}\`\`\``,
           color: 0x3498db,
           timestamp: new Date(),
           footer: { text: "Network Diagnostics" }
         };
         
         await interaction.editReply({ embeds: [traceEmbed] });
+      });
+  
+      traceroute.on('close', async (code) => {
+        const finalEmbed = {
+          title: "Traceroute Complete",
+          description: `Target: ${target}\nMax Hops: ${maxHops}\n\n\`\`\`\n${output}\`\`\``,
+          color: 0x00ff00,
+          timestamp: new Date(),
+          footer: { text: "Network Diagnostics" }
+        };
+        
+        await interaction.editReply({ embeds: [finalEmbed] });
       });
     } catch (error) {
       console.error(error);
@@ -841,7 +856,8 @@ case "anime":
         ephemeral: true
       });
     }
-    break;    case "whois":
+    break;
+  case "whois":
   try {
     await interaction.deferReply();
     const domain = interaction.options.getString("domain");
