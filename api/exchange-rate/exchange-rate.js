@@ -139,7 +139,7 @@ router.get('/', (req, res) => {
     availableCurrencies,
     lastUpdated: exchangeRatesCache.USD.lastUpdated,
     nextUpdate: exchangeRatesCache.USD.nextUpdateTime,
-    updateInterval: '3 days',
+    updateInterval: '1 day',
     endpoints: {
       latest: '/latest',
       convert: '/convert/:from/:to/:amount',
