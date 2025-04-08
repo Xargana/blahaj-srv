@@ -1,6 +1,6 @@
 const express = require("express");
 const ping = require("ping");
-const pm2 = require("pm2");
+const { execSync } = require("child_process");
 
 const router = express.Router();
 
@@ -45,54 +45,90 @@ async function checkServers() {
     }
 }
 
-async function checkPM2Services() {
-    return new Promise((resolve, reject) => {
-        pm2.connect(function(err) {
-            if (err) {
-                console.error('Error connecting to PM2:', err);
-                pm2.disconnect();
-                resolve();
-                return;
-            }
+function checkPM2Services() {
+    try {
+        // Use execSync to ensure we get the output immediately
+        const output = execSync('pm2 jlist', { encoding: 'utf8' });
+        
+        try {
+            const processList = JSON.parse(output);
             
-            pm2.list((err, list) => {
-                if (err) {
-                    console.error('Error getting PM2 process list:', err);
-                    pm2.disconnect();
-                    resolve();
-                    return;
-                }
+            // Clear previous status
+            pm2ServicesStatus = {};
+            
+            processList.forEach(process => {
+                pm2ServicesStatus[process.name] = {
+                    name: process.name,
+                    id: process.pm_id,
+                    status: process.pm2_env.status,
+                    cpu: process.monit ? process.monit.cpu : null,
+                    memory: process.monit ? process.monit.memory : null,
+                    uptime: process.pm2_env.pm_uptime ? 
+                           Math.floor((Date.now() - process.pm2_env.pm_uptime) / 1000) : 
+                           null,
+                    restarts: process.pm2_env.restart_time,
+                    lastChecked: new Date().toISOString()
+                };
+            });
+        } catch (parseError) {
+            console.error(`Error parsing PM2 output: ${parseError.message}`);
+        }
+    } catch (error) {
+        console.error(`Error executing pm2 jlist: ${error.message}`);
+        
+        // Try an alternative approach using pm2 list
+        try {
+            const output = execSync('pm2 list --format json', { encoding: 'utf8' });
+            
+            try {
+                const processList = JSON.parse(output);
                 
-                // Update PM2 services status
-                list.forEach(process => {
+                // Clear previous status
+                pm2ServicesStatus = {};
+                
+                processList.forEach(process => {
                     pm2ServicesStatus[process.name] = {
                         name: process.name,
                         id: process.pm_id,
-                        status: process.pm2_env.status,
-                        cpu: process.monit ? process.monit.cpu : null,
-                        memory: process.monit ? process.monit.memory : null,
-                        uptime: process.pm2_env.pm_uptime ? 
-                               Date.now() - process.pm2_env.pm_uptime : 
-                               null,
-                        restarts: process.pm2_env.restart_time,
+                        status: process.status || 'unknown',
+                        cpu: process.cpu || null,
+                        memory: process.memory || null,
+                        uptime: null, // Not available in this format
+                        restarts: process.restart || 0,
                         lastChecked: new Date().toISOString()
                     };
                 });
+            } catch (parseError) {
+                console.error(`Error parsing PM2 list output: ${parseError.message}`);
+            }
+        } catch (fallbackError) {
+            console.error(`Error with fallback PM2 command: ${fallbackError.message}`);
+            
+            // Last resort: just check if processes are running using ps
+            try {
+                const output = execSync('ps aux | grep pm2', { encoding: 'utf8' });
+                const lines = output.split('\n').filter(line => 
+                    line.includes('PM2') && !line.includes('grep')
+                );
                 
-                pm2.disconnect();
-                resolve();
-            });
-        });
-    });
+                pm2ServicesStatus = {
+                    'pm2-daemon': {
+                        name: 'pm2-daemon',
+                        status: lines.length > 0 ? 'online' : 'stopped',
+                        lastChecked: new Date().toISOString()
+                    }
+                };
+            } catch (psError) {
+                console.error(`Error checking processes: ${psError.message}`);
+                pm2ServicesStatus = { error: 'Unable to check PM2 processes' };
+            }
+        }
+    }
 }
 
-async function checkAll() {
-    try {
-        await checkServers();
-        await checkPM2Services();
-    } catch (error) {
-        console.error("Error in checkAll function:", error);
-    }
+function checkAll() {
+    checkServers();
+    checkPM2Services();
 }
 
 // Initial check with error handling
