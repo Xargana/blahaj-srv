@@ -47,44 +47,47 @@ async function checkServers() {
 }
 
 async function checkPM2Services() {
-    return new Promise((resolve, reject) => {
-        pm2.connect(function(err) {
-            if (err) {
-                console.error('Error connecting to PM2:', err);
-                pm2.disconnect();
-                resolve();
-                return;
-            }
-            
-            pm2.list((err, list) => {
-                if (err) {
-                    console.error('Error getting PM2 process list:', err);
-                    pm2.disconnect();
-                    resolve();
-                    return;
-                }
-                
-                // Update PM2 services status
-                list.forEach(process => {
-                    pm2ServicesStatus[process.name] = {
-                        name: process.name,
-                        id: process.pm_id,
-                        status: process.pm2_env.status,
-                        cpu: process.monit ? process.monit.cpu : null,
-                        memory: process.monit ? process.monit.memory : null,
-                        uptime: process.pm2_env.pm_uptime ? 
-                               Date.now() - process.pm2_env.pm_uptime : 
-                               null,
-                        restarts: process.pm2_env.restart_time,
-                        lastChecked: new Date().toISOString()
-                    };
-                });
-                
-                pm2.disconnect();
-                resolve();
-            });
-        });
-    });
+  return new Promise((resolve, reject) => {
+      pm2.connect(function(err) {
+          if (err) {
+              console.error('Error connecting to PM2:', err);
+              pm2.disconnect();
+              resolve();
+              return;
+          }
+          
+          pm2.list((err, list) => {
+              if (err) {
+                  console.error('Error getting PM2 process list:', err);
+                  pm2.disconnect();
+                  resolve();
+                  return;
+              }
+              
+              // Update PM2 services status
+              list.forEach(process => {
+                  // Calculate uptime correctly - pm_uptime is a timestamp, not a duration
+                  const uptimeMs = process.pm2_env.pm_uptime ? 
+                                  Date.now() - process.pm2_env.pm_uptime : 
+                                  null;
+                  
+                  pm2ServicesStatus[process.name] = {
+                      name: process.name,
+                      id: process.pm_id,
+                      status: process.pm2_env.status,
+                      cpu: process.monit ? process.monit.cpu : null,
+                      memory: process.monit ? process.monit.memory : null,
+                      uptime: uptimeMs, // Store the uptime in milliseconds
+                      restarts: process.pm2_env.restart_time,
+                      lastChecked: new Date().toISOString()
+                  };
+              });
+              
+              pm2.disconnect();
+              resolve();
+          });
+      });
+  });
 }
 
 async function checkAll() {
