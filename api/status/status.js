@@ -1,5 +1,6 @@
 const express = require("express");
 const ping = require("ping");
+const pm2 = require("pm2");
 
 const router = express.Router();
 
@@ -20,6 +21,9 @@ REMOTE_SERVERS.forEach(server => {
     };
 });
 
+// Add PM2 services status object
+let pm2ServicesStatus = {};
+
 async function checkServers() {
     for (const server of REMOTE_SERVERS) {
         const startTime = Date.now();
@@ -35,11 +39,60 @@ async function checkServers() {
     }
 }
 
-setInterval(checkServers, CHECK_INTERVAL);
-checkServers();
+async function checkPM2Services() {
+    return new Promise((resolve, reject) => {
+        pm2.connect(function(err) {
+            if (err) {
+                console.error('Error connecting to PM2:', err);
+                pm2.disconnect();
+                resolve();
+                return;
+            }
+            
+            pm2.list((err, list) => {
+                if (err) {
+                    console.error('Error getting PM2 process list:', err);
+                    pm2.disconnect();
+                    resolve();
+                    return;
+                }
+                
+                // Update PM2 services status
+                list.forEach(process => {
+                    pm2ServicesStatus[process.name] = {
+                        name: process.name,
+                        id: process.pm_id,
+                        status: process.pm2_env.status,
+                        cpu: process.monit.cpu,
+                        memory: process.monit.memory,
+                        uptime: process.pm2_env.pm_uptime ? 
+                               Date.now() - process.pm2_env.pm_uptime : 
+                               null,
+                        restarts: process.pm2_env.restart_time,
+                        lastChecked: new Date().toISOString()
+                    };
+                });
+                
+                pm2.disconnect();
+                resolve();
+            });
+        });
+    });
+}
+
+async function checkAll() {
+    await checkServers();
+    await checkPM2Services();
+}
+
+setInterval(checkAll, CHECK_INTERVAL);
+checkAll();
 
 router.get("/", (req, res) => {
-    res.json(serversStatus);
+    res.json({
+        servers: serversStatus,
+        pm2Services: pm2ServicesStatus
+    });
 });
 
 module.exports = router;
