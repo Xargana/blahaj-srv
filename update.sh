@@ -3,5 +3,6 @@ cd /var/server/blahaj-srv
 git commit -a -m "auto update"
 git pull origin main
 chown -R www-data:www-data /var/server/blahaj-srv 
-pm2 restart node-api
-pm2 restart discord-blahaj.tr
+pm2 delete api
+pm2 start ecosystem.config.js
+
