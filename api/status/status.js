@@ -21,55 +21,25 @@ REMOTE_SERVERS.forEach(server => {
 });
 
 async function checkServers() {
-    try {
-        for (const server of REMOTE_SERVERS) {
-            try {
-                const res = await ping.promise.probe(server.host, {
-                    timeout: 2, // Set a timeout of 2 seconds
-                });
-                serversStatus[server.name].online = res.alive;
-                serversStatus[server.name].responseTime = res.time;
-            } catch (error) {
-                console.error(`Error pinging ${server.host}:`, error);
-                serversStatus[server.name].online = false;
-                serversStatus[server.name].responseTime = null;
-            }
-            serversStatus[server.name].lastChecked = new Date().toISOString();
+    for (const server of REMOTE_SERVERS) {
+        const startTime = Date.now();
+        try {
+            const res = await ping.promise.probe(server.host);
+            serversStatus[server.name].online = res.alive;
+            serversStatus[server.name].responseTime = res.time;
+        } catch (error) {
+            serversStatus[server.name].online = false;
+            serversStatus[server.name].responseTime = null;
         }
-    } catch (error) {
-        console.error("Error in checkServers function:", error);
+        serversStatus[server.name].lastChecked = new Date().toISOString();
     }
 }
 
-// Initial check with error handling
-try {
-    checkServers();
-} catch (error) {
-    console.error("Error during initial check:", error);
-}
+setInterval(checkServers, CHECK_INTERVAL);
+checkServers();
 
-// Set interval with error handling
-setInterval(() => {
-    try {
-        checkServers();
-    } catch (error) {
-        console.error("Error during scheduled check:", error);
-    }
-}, CHECK_INTERVAL);
-
-// Route with error handling
 router.get("/", (req, res) => {
-    try {
-        res.json(serversStatus);
-    } catch (error) {
-        console.error("Error sending status response:", error);
-        res.status(500).json({ error: "Internal server error" });
-    }
-});
-
-// Add a simple health check endpoint
-router.get("/health", (req, res) => {
-    res.status(200).send("OK");
+    res.json(serversStatus);
 });
 
 module.exports = router;
