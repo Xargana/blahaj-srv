@@ -30,7 +30,7 @@ async function checkServers() {
         for (const server of REMOTE_SERVERS) {
             try {
                 const res = await ping.promise.probe(server.host, {
-                    timeout: 2, // Set a timeout of 2 seconds
+                    timeout: 4, // Set a timeout of 4 seconds
                 });
                 serversStatus[server.name].online = res.alive;
                 serversStatus[server.name].responseTime = res.time;

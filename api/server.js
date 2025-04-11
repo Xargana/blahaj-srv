@@ -9,6 +9,7 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const status = require("./status/status");
 const exchangeRate = require("./exchange-rate/exchange-rate");
+const whois = require("./whois/whois");
 
 const app = express();
 const PORT = process.env.PORT || 2589;
@@ -19,6 +20,7 @@ const cert = process.env.SSL_CERT_PATH || "/etc/letsencrypt/live/blahaj.tr/fullc
 app.use(cors());
 app.use("/status", status);
 app.use("/exchange-rate", exchangeRate);
+app.use("/whois", whois);
 
 // try to load certificates
 try {
