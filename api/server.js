@@ -12,8 +12,7 @@ const exchangeRate = require("./exchange-rate/exchange-rate");
 const whois = require("./whois/whois");
 
 const app = express();
-const HTTP_PORT = process.env.HTTP_PORT || 2589;
-const HTTPS_PORT = process.env.HTTPS_PORT || 2845;
+const PORT = process.env.PORT || 2589;
 
 const key = process.env.SSL_KEY_PATH || "/etc/letsencrypt/live/blahaj.tr/privkey.pem";
 const cert = process.env.SSL_CERT_PATH || "/etc/letsencrypt/live/blahaj.tr/fullchain.pem";
@@ -23,20 +22,15 @@ app.use("/status", status);
 app.use("/exchange-rate", exchangeRate);
 app.use("/whois", whois);
 
-// Start HTTP server
-http.createServer(app).listen(HTTP_PORT, () => {
-    console.log(`API running at http://localhost:${HTTP_PORT}`);
-});
-
-// try to load certificates and start HTTPS server
+// try to load certificates
 try {
     const sslOptions = {
         key: fs.readFileSync(key),
         cert: fs.readFileSync(cert),
     };
 
-    https.createServer(sslOptions, app).listen(HTTPS_PORT, () => {
-        console.log(`API running at https://localhost:${HTTPS_PORT}`);
+    https.createServer(sslOptions, app).listen(PORT, () => {
+        console.log(`API running at https://localhost:${PORT}`);
     });
 } catch (e) {
     if (e.code === 'ENOENT') {
@@ -44,5 +38,11 @@ try {
     } else {
         console.warn(`Error loading SSL certificates: ${e.message}`);
     }
-    console.warn("HTTPS server could not be started");
+    
+    console.log("Starting server without SSL...");
+    
+    // start http server as fallback
+    http.createServer(app).listen(PORT, () => {
+        console.log(`API running at http://localhost:${PORT}`);
+    });
 }
