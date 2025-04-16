@@ -3,8 +3,7 @@ const path = require('path');
 require('dotenv').config();
 
 // Import the Bot class
-const Bot = require('./discord');
-
+const Bot = require('./discord/classes/Bot');
 // Global variables to hold our services
 let apiServer;
 let discordBot;
