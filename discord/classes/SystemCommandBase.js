@@ -18,14 +18,6 @@ class SystemCommandBase extends CommandBase {
         });
       }
       
-      // Additional DM-only check
-      if (interaction.channel.type !== 'DM') {
-        return interaction.reply({
-          content: "System commands can only be used in Direct Messages for security.",
-          ephemeral: true
-        });
-      }
-      
       return originalExecute.call(this, interaction);
     };
   }

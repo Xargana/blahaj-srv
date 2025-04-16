@@ -57,17 +57,7 @@ class Bot {
     
     // Interaction event
     this.client.on("interactionCreate", async (interaction) => {
-      // Only process commands if:
-      // 1. It's a DM channel
-      // 2. The user is authorized
-      if (interaction.channel?.type !== ChannelType.DM) {
-        await interaction.reply({ 
-          content: "This bot only works in direct messages for security reasons.", 
-          ephemeral: true 
-        });
-        return;
-      }
-      
+      // Only process commands if the user is authorized
       if (interaction.user.id !== this.authorizedUserId) {
         console.log(`Unauthorized access attempt by ${interaction.user.tag} (${interaction.user.id})`);
         await interaction.reply({ 
@@ -92,7 +82,7 @@ class Bot {
   async sendStartupNotification() {
     // Create startup embed
     const startupEmbed = {
-      title: "VPS Control Bot Status",
+      title: "blahaj.tr bot status update",
       description: `Bot started successfully at <t:${Math.floor(Date.now() / 1000)}:F>`,
       color: 0x00ff00,
       fields: [
@@ -108,7 +98,7 @@ class Bot {
         }
       ],
       footer: {
-        text: "VPS Control Bot"
+        text: "blahaj.tr"
       }
     };
     
