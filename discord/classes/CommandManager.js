@@ -9,6 +9,9 @@ class CommandManager {
     this.commandFolders = ['info', 'system']; // Only include info and system commands
     this.rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     this.authorizedUserId = process.env.AUTHORIZED_USER_ID;
+    
+    // Add this line to load commands when the CommandManager is created
+    this.loadCommands();
   }
 
   async loadCommands() {
