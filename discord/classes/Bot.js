@@ -21,6 +21,10 @@ class Bot {
     // Add reference to this bot instance on the client for access from commands
     this.client.bot = this;
 
+    // THIS IS IMPORTANT: Make sure CommandManager is initialized AFTER the client
+    // and before using it anywhere else
+    this.commandManager = new CommandManager(this.client);
+    
     // Authorized users for commands - Parse comma-separated list from env variable
     this.authorizedUserIds = process.env.AUTHORIZED_USER_IDS 
       ? process.env.AUTHORIZED_USER_IDS.split(',').map(id => id.trim())
@@ -67,17 +71,12 @@ class Bot {
     this.client.once("ready", async () => {
       console.log(`Logged in as ${this.client.user.tag}`);
       
-      // Only register global commands for direct messages
-      await this.commandManager.registerGlobalCommands();
-      
-      // Initialize and start the notification service
-      this.notificationService = new NotificationService(this.client, {
-        checkInterval: process.env.STATUS_CHECK_INTERVAL ? parseInt(process.env.STATUS_CHECK_INTERVAL) : 5000,
-        statusEndpoint: process.env.STATUS_ENDPOINT || 'https://blahaj.tr:2589/status'
-      });
-      
-      await this.notificationService.initialize();
-      this.notificationService.start();
+      // Add safety check before trying to register commands
+      if (this.commandManager && typeof this.commandManager.registerGlobalCommands === 'function') {
+        await this.commandManager.registerGlobalCommands();
+      } else {
+        console.error('Command manager not properly initialized - cannot register commands');
+      }
       
       // Send startup notification
       await this.sendStartupNotification();
