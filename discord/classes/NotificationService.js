@@ -3,7 +3,28 @@ const axios = require('axios');
 class NotificationService {
   constructor(client, options = {}) {
     this.client = client;
-    this.authorizedUserId = process.env.AUTHORIZED_USER_ID;
+    
+    // Parse notification recipient IDs (separate from command authorization)
+    this.notificationRecipientIds = process.env.NOTIFICATION_USER_IDS ? 
+      process.env.NOTIFICATION_USER_IDS.split(',').map(id => id.trim()) : 
+      [];
+      
+    // For backward compatibility - if no notification IDs specified, use authorized IDs
+    if (this.notificationRecipientIds.length === 0) {
+      // Use the bot's authorizedUserIds as fallback
+      this.notificationRecipientIds = client.bot.authorizedUserIds || 
+        (process.env.AUTHORIZED_USER_IDS ? 
+          process.env.AUTHORIZED_USER_IDS.split(',').map(id => id.trim()) : 
+          []);
+          
+      // Add legacy single user ID for backward compatibility
+      if (process.env.AUTHORIZED_USER_ID && !this.notificationRecipientIds.includes(process.env.AUTHORIZED_USER_ID)) {
+        this.notificationRecipientIds.push(process.env.AUTHORIZED_USER_ID);
+      }
+    }
+    
+    console.log(`Notification recipients configured: ${this.notificationRecipientIds.length}`);
+    
     this.statusChannel = null;
     this.checkInterval = options.checkInterval || 10000; // Changed to 10 seconds default
     this.statusEndpoint = options.statusEndpoint || 'https://blahaj.tr:2589/status';
@@ -263,14 +284,14 @@ class NotificationService {
       }
     }
     
-    // Send to owner
-    if (this.authorizedUserId) {
+    // Send to all notification recipients
+    for (const userId of this.notificationRecipientIds) {
       try {
-        const owner = await this.client.users.fetch(this.authorizedUserId);
-        await owner.send({ embeds: [embed] });
-        console.log('Status change notification sent to owner');
+        const user = await this.client.users.fetch(userId);
+        await user.send({ embeds: [embed] });
+        console.log(`Status change notification sent to recipient: ${user.tag}`);
       } catch (error) {
-        console.error(`Failed to send status notification to owner: ${error.message}`);
+        console.error(`Failed to send status notification to user ${userId}: ${error.message}`);
       }
     }
   }

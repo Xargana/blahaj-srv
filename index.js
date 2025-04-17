@@ -51,8 +51,31 @@ async function shutdown(signal) {
 }
 
 // Register shutdown handlers
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', async () => {
+  console.log('Received SIGINT. Shutting down gracefully...');
+  try {
+    // If you have the bot instance available, call shutdown method
+    if (global.discordBot) {
+      await global.discordBot.sendShutdownNotification("SIGINT received");
+    }
+  } catch (error) {
+    console.error("Error shutting down Discord bot:", error);
+  }
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Received SIGTERM. Shutting down gracefully...');
+  try {
+    // If you have the bot instance available, call shutdown method
+    if (global.discordBot) {
+      await global.discordBot.sendShutdownNotification("SIGTERM received");
+    }
+  } catch (error) {
+    console.error("Error shutting down Discord bot:", error);
+  }
+  process.exit(0);
+});
 
 // Catch uncaught exceptions
 process.on('uncaughtException', (error) => {
