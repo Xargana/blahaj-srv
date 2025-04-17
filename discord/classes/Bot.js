@@ -96,7 +96,7 @@ class Bot {
     // Interaction event
     this.client.on("interactionCreate", async (interaction) => {
       // Only process commands if the user is authorized
-      if (interaction.user.id !== this.authorizedUserId) {
+      if (!this.authorizedUserIds.includes(interaction.user.id)) {
         console.log(`Unauthorized access attempt by ${interaction.user.tag} (${interaction.user.id})`);
         await interaction.reply({ 
           content: "You are not authorized to use this bot.", 
