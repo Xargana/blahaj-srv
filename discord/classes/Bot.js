@@ -170,7 +170,7 @@ class Bot {
   async sendShutdownNotification(reason = "Manual shutdown", error = null) {
     // Create shutdown embed
     const shutdownEmbed = {
-      title: "blahaj.tr bot status update",
+      title: "Bot Shutdown Notification",
       description: `Bot is shutting down at <t:${Math.floor(Date.now() / 1000)}:F>`,
       color: 0xFF0000,
       fields: [
@@ -181,7 +181,7 @@ class Bot {
         },
         {
           name: "Shutdown Reason",
-          value: reason || "Unknown",
+          value: reason || "Unknown reason",
           inline: true
         },
         {
