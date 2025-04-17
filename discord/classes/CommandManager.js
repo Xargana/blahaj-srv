@@ -48,26 +48,35 @@ class CommandManager {
 
   async registerGlobalCommands() {
     try {
-      await this.loadCommands();
+      console.log("Registering global commands...");
       
-      if (this.commands.size === 0) {
-        console.log("No commands to register.");
-        return;
-      }
+      const commandsData = this.commands.map(command => {
+        const data = {
+          name: command.name,
+          description: command.description,
+          options: command.options || [],
+          // Add these lines for global availability in all contexts
+          integration_types: [1], // Add integration type for global availability
+          contexts: [0, 1, 2],    // Available in all contexts (DM, GROUP_DM, GUILD)
+        };
+        
+        // If the command has an addOptions method, call it
+        if (typeof command.addOptions === 'function') {
+          data.options = command.addOptions(new SlashCommandBuilder()).options;
+        }
+        
+        return data;
+      });
       
-      const commandsData = this.commands.map(command => command.toJSON());
-      
-      console.log(`Started refreshing ${commandsData.length} application (/) commands.`);
-      
-      // Register as global commands for DMs
-      const data = await this.rest.put(
+      const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+      await rest.put(
         Routes.applicationCommands(this.client.user.id),
         { body: commandsData },
       );
       
-      console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+      console.log(`Successfully registered ${commandsData.length} global commands`);
     } catch (error) {
-      console.error(error);
+      console.error('Error registering global commands:', error);
     }
   }
 
@@ -100,6 +109,22 @@ class CommandManager {
       } else {
         await interaction.reply(errorMessage);
       }
+    }
+  }
+
+  async handleAutocomplete(interaction) {
+    const command = this.commands.get(interaction.commandName);
+    
+    if (!command || typeof command.handleAutocomplete !== 'function') {
+      return;
+    }
+    
+    try {
+      await command.handleAutocomplete(interaction);
+    } catch (error) {
+      console.error(`Error handling autocomplete for ${interaction.commandName}:`, error);
+      // Respond with empty array as fallback
+      await interaction.respond([]);
     }
   }
 }
