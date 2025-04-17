@@ -18,36 +18,11 @@ class Bot {
       partials: ['CHANNEL', 'MESSAGE']
     });
     
-    // Add reference to this bot instance on the client for access from commands
-    this.client.bot = this;
-
-    // THIS IS IMPORTANT: Make sure CommandManager is initialized AFTER the client
-    // and before using it anywhere else
-    try {
-      this.commandManager = new CommandManager(this.client);
-      console.log("Command Manager initialized successfully");
-    } catch (error) {
-      console.error("Failed to initialize Command Manager:", error);
-      this.commandManager = null; // Set to null instead of leaving undefined
-    }
+    // Initialize command manager
+    this.commandManager = new CommandManager(this.client);
     
-    // Authorized users for commands - Parse comma-separated list from env variable
-    this.authorizedUserIds = process.env.AUTHORIZED_USER_IDS 
-      ? process.env.AUTHORIZED_USER_IDS.split(',').map(id => id.trim())
-      : [];
-    
-    // For backward compatibility, add the old env var if it exists
-    if (process.env.AUTHORIZED_USER_ID && !this.authorizedUserIds.includes(process.env.AUTHORIZED_USER_ID)) {
-      this.authorizedUserIds.push(process.env.AUTHORIZED_USER_ID);
-    }
-    
-    // Parse notification recipient IDs (separate from command authorization)
-    this.notificationRecipientIds = process.env.NOTIFICATION_USER_IDS ? 
-      process.env.NOTIFICATION_USER_IDS.split(',').map(id => id.trim()) : 
-      this.authorizedUserIds; // Default to authorized users if not specified
-    
-    console.log(`Authorized users configured: ${this.authorizedUserIds.length}`);
-    console.log(`Notification recipients configured: ${this.notificationRecipientIds.length}`);
+    // Authorized user ID - CHANGE THIS to your Discord user ID
+    this.authorizedUserId = process.env.AUTHORIZED_USER_ID;
     
     // Setup temp directory
     this.setupTempDirectory();
@@ -77,17 +52,17 @@ class Bot {
     this.client.once("ready", async () => {
       console.log(`Logged in as ${this.client.user.tag}`);
       
-      // Add safety check before trying to register commands
-      if (this.commandManager && typeof this.commandManager.registerGlobalCommands === 'function') {
-        try {
-          await this.commandManager.registerGlobalCommands();
-          console.log("Global commands registered successfully");
-        } catch (error) {
-          console.error("Error registering global commands:", error);
-        }
-      } else {
-        console.error('Command manager not properly initialized - cannot register commands');
-      }
+      // Only register global commands for direct messages
+      await this.commandManager.registerGlobalCommands();
+      
+      // Initialize and start the notification service
+      this.notificationService = new NotificationService(this.client, {
+        checkInterval: process.env.STATUS_CHECK_INTERVAL ? parseInt(process.env.STATUS_CHECK_INTERVAL) : 5000,
+        statusEndpoint: process.env.STATUS_ENDPOINT || 'https://blahaj.tr:2589/status'
+      });
+      
+      await this.notificationService.initialize();
+      this.notificationService.start();
       
       // Send startup notification
       await this.sendStartupNotification();
@@ -96,7 +71,7 @@ class Bot {
     // Interaction event
     this.client.on("interactionCreate", async (interaction) => {
       // Only process commands if the user is authorized
-      if (!this.authorizedUserIds.includes(interaction.user.id)) {
+      if (interaction.user.id !== this.authorizedUserId) {
         console.log(`Unauthorized access attempt by ${interaction.user.tag} (${interaction.user.id})`);
         await interaction.reply({ 
           content: "You are not authorized to use this bot.", 
@@ -145,15 +120,14 @@ class Bot {
       }
     };
     
-    // Notify all recipients
-    for (const userId of this.notificationRecipientIds) {
-      try {
-        const user = await this.client.users.fetch(userId);
-        await user.send({ embeds: [startupEmbed] });
-        console.log(`Sent startup notification to recipient: ${user.tag}`);
-      } catch (error) {
-        console.error(`Failed to send startup notification to user ${userId}:`, error.message);
-      }
+    // Only notify the authorized user
+    try {
+      const owner = await this.client.users.fetch(this.authorizedUserId);
+      await owner.send({ embeds: [startupEmbed] });
+      console.log(`Sent startup notification to authorized user: ${owner.tag}`);
+    } catch (error) {
+      console.error("Failed to send startup notification to authorized user:", error.message);
+      console.log("This is not critical - the bot will still function normally");
     }
     
     // Also notify in status channel if configured
@@ -170,18 +144,18 @@ class Bot {
   async sendShutdownNotification(reason = "Manual shutdown", error = null) {
     // Create shutdown embed
     const shutdownEmbed = {
-      title: "Bot Shutdown Notification",
+      title: "blahaj.tr bot status update",
       description: `Bot is shutting down at <t:${Math.floor(Date.now() / 1000)}:F>`,
       color: 0xFF0000,
       fields: [
         {
           name: "Bot Name",
-          value: this.client?.user?.tag || "Unknown (Client unavailable)",
+          value: this.client.user.tag,
           inline: true
         },
         {
           name: "Shutdown Reason",
-          value: reason || "Unknown reason",
+          value: reason || "Unknown",
           inline: true
         },
         {
@@ -203,30 +177,28 @@ class Bot {
       });
     }
     
-    // Only attempt to send notifications if client is ready
-    if (this.client?.isReady()) {
-      // Notify all recipients
-      for (const userId of this.notificationRecipientIds) {
-        try {
-          const user = await this.client.users.fetch(userId);
-          await user.send({ embeds: [shutdownEmbed] });
-          console.log(`Sent shutdown notification to recipient: ${user.tag}`);
-        } catch (error) {
-          console.error(`Failed to send shutdown notification to user ${userId}:`, error.message);
-        }
-      }
+    // Stop notification service if running
+    if (this.notificationService?.isRunning) {
+      this.notificationService.stop();
+    }
     
-      // Also notify in status channel if available
-      if (this.notificationService?.statusChannel) {
-        try {
-          await this.notificationService.statusChannel.send({ embeds: [shutdownEmbed] });
-          console.log(`Sent shutdown notification to status channel: ${this.notificationService.statusChannel.name}`);
-        } catch (error) {
-          console.error("Failed to send shutdown notification to status channel:", error.message);
-        }
+    // Notify authorized user
+    try {
+      const owner = await this.client.users.fetch(this.authorizedUserId);
+      await owner.send({ embeds: [shutdownEmbed] });
+      console.log(`Sent shutdown notification to authorized user: ${owner.tag}`);
+    } catch (error) {
+      console.error("Failed to send shutdown notification to authorized user:", error.message);
+    }
+    
+    // Also notify in status channel if available
+    if (this.notificationService?.statusChannel) {
+      try {
+        await this.notificationService.statusChannel.send({ embeds: [shutdownEmbed] });
+        console.log(`Sent shutdown notification to status channel: ${this.notificationService.statusChannel.name}`);
+      } catch (error) {
+        console.error("Failed to send shutdown notification to status channel:", error.message);
       }
-    } else {
-      console.log("Client not ready, cannot send shutdown notifications");
     }
   }
   
