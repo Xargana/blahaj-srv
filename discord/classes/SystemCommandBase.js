@@ -11,7 +11,11 @@ class SystemCommandBase extends CommandBase {
     // Add security check for all system commands
     const originalExecute = this.execute;
     this.execute = async function(interaction) {
-      if (interaction.user.id !== process.env.AUTHORIZED_USER_ID) {
+      // Get authorized users from the bot instance
+      const authorizedUserIds = client.bot?.authorizedUserIds || [];
+      
+      // Check if user ID is in the authorized users array
+      if (!authorizedUserIds.includes(interaction.user.id)) {
         return interaction.reply({
           content: "You are not authorized to use system commands.",
           ephemeral: true
