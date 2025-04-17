@@ -74,13 +74,8 @@ class CommandManager {
   async handleInteraction(interaction) {
     if (!interaction.isChatInputCommand()) return;
     
-    // Double-check authorization
-    if (interaction.user.id !== this.authorizedUserId) {
-      return interaction.reply({
-        content: "You are not authorized to use this command.",
-        ephemeral: true
-      });
-    }
+    // We don't need to double-check authorization here since Bot.js already checks
+    // This avoids potential inconsistencies in the authorization check
     
     const command = this.commands.get(interaction.commandName);
     if (!command) return;
