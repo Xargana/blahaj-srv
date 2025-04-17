@@ -4,6 +4,7 @@ require('dotenv').config();
 
 // Import the Bot class
 const Bot = require('./discord/classes/Bot');
+
 // Global variables to hold our services
 let apiServer;
 let discordBot;
@@ -32,10 +33,11 @@ async function startServices() {
 async function shutdown(signal) {
   console.log(`Received ${signal}. Shutting down gracefully...`);
   
-  // Shutdown Discord bot if it exists and has a shutdown method
-  if (discordBot && typeof discordBot.sendShutdownNotification === 'function') {
+  // Shutdown Discord bot if it exists
+  if (discordBot) {
     try {
       await discordBot.sendShutdownNotification(`Manual shutdown triggered by ${signal}`);
+      await discordBot.stop();
       console.log('Discord bot shutdown complete');
     } catch (error) {
       console.error('Error shutting down Discord bot:', error);
@@ -55,7 +57,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 // Catch uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
-  if (discordBot && typeof discordBot.sendShutdownNotification === 'function') {
+  if (discordBot) {
     discordBot.sendShutdownNotification('Uncaught exception', error)
       .finally(() => process.exit(1));
   } else {

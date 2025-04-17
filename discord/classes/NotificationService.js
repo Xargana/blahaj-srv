@@ -1,0 +1,267 @@
+const axios = require('axios');
+
+class NotificationService {
+  constructor(client, options = {}) {
+    this.client = client;
+    this.authorizedUserId = process.env.AUTHORIZED_USER_ID;
+    this.statusChannel = null;
+    this.checkInterval = options.checkInterval || 60000; // Default: check every minute
+    this.statusEndpoint = options.statusEndpoint || 'https://blahaj.tr:2589/status';
+    this.notificationChannelId = process.env.STATUS_NOTIFICATION_CHANNEL;
+    
+    // Store the previous status to compare for changes
+    this.previousStatus = {
+      servers: {},
+      services: {}
+    };
+    
+    // Track if this is the first check (to avoid notifications on startup)
+    this.isFirstCheck = true;
+    
+    // Indicate if the service is running
+    this.isRunning = false;
+  }
+  
+  async initialize() {
+    // Fetch the channel if a channel ID is provided
+    if (this.notificationChannelId) {
+      try {
+        this.statusChannel = await this.client.channels.fetch(this.notificationChannelId);
+        console.log(`Status notification channel set to: ${this.statusChannel.name}`);
+      } catch (error) {
+        console.error(`Failed to fetch status notification channel: ${error.message}`);
+      }
+    }
+    
+    // Do an initial check to populate the previous status
+    try {
+      const initialStatus = await this.fetchStatus();
+      this.previousStatus = initialStatus;
+      console.log('Initial status check complete');
+    } catch (error) {
+      console.error(`Initial status check failed: ${error.message}`);
+    }
+  }
+  
+  start() {
+    if (this.isRunning) return;
+    
+    console.log(`Starting status notification service (checking every ${this.checkInterval/1000} seconds)`);
+    this.isRunning = true;
+    this.checkTimer = setInterval(() => this.checkStatus(), this.checkInterval);
+    
+    // Run the first check
+    this.checkStatus();
+  }
+  
+  stop() {
+    if (!this.isRunning) return;
+    
+    console.log('Stopping status notification service');
+    clearInterval(this.checkTimer);
+    this.isRunning = false;
+  }
+  
+  async fetchStatus() {
+    try {
+      const response = await axios.get(this.statusEndpoint);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching status: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  async checkStatus() {
+    try {
+      const currentStatus = await this.fetchStatus();
+      const changes = this.detectChanges(this.previousStatus, currentStatus);
+      
+      // If changes detected and not the first check, send notifications
+      if (changes.length > 0 && !this.isFirstCheck) {
+        await this.sendNotifications(changes, currentStatus);
+      }
+      
+      // Update previous status and set first check to false
+      this.previousStatus = currentStatus;
+      this.isFirstCheck = false;
+    } catch (error) {
+      console.error(`Status check failed: ${error.message}`);
+    }
+  }
+  
+  detectChanges(previousStatus, currentStatus) {
+    const changes = [];
+    
+    // Check for server status changes
+    if (previousStatus.servers && currentStatus.servers) {
+      for (const server in currentStatus.servers) {
+        // New server or status changed
+        if (!previousStatus.servers[server] || 
+            previousStatus.servers[server].online !== currentStatus.servers[server].online) {
+          changes.push({
+            type: 'server',
+            name: server,
+            status: currentStatus.servers[server].online ? 'online' : 'offline',
+            previous: previousStatus.servers[server]?.online ? 'online' : 'offline',
+            isNew: !previousStatus.servers[server]
+          });
+        }
+      }
+      
+      // Check for removed servers
+      for (const server in previousStatus.servers) {
+        if (!currentStatus.servers[server]) {
+          changes.push({
+            type: 'server',
+            name: server,
+            status: 'removed',
+            previous: previousStatus.servers[server].online ? 'online' : 'offline'
+          });
+        }
+      }
+    }
+    
+    // Check for PM2 service status changes
+    if (previousStatus.services && currentStatus.services) {
+      for (const service in currentStatus.services) {
+        if (!previousStatus.services[service] || 
+            previousStatus.services[service].status !== currentStatus.services[service].status) {
+          changes.push({
+            type: 'service',
+            name: service,
+            status: currentStatus.services[service].status,
+            previous: previousStatus.services[service]?.status || 'unknown',
+            isNew: !previousStatus.services[service]
+          });
+        }
+      }
+      
+      // Check for removed services
+      for (const service in previousStatus.services) {
+        if (!currentStatus.services[service]) {
+          changes.push({
+            type: 'service',
+            name: service,
+            status: 'removed',
+            previous: previousStatus.services[service].status
+          });
+        }
+      }
+    }
+    
+    return changes;
+  }
+  
+  async sendNotifications(changes, currentStatus) {
+    if (changes.length === 0) return;
+    
+    // Create an embed for the notification
+    const embed = {
+      title: 'Status Change Detected',
+      color: 0xFFAA00, // Amber color for notifications
+      timestamp: new Date(),
+      fields: [],
+      footer: {
+        text: 'blahaj.tr Status Monitor'
+      }
+    };
+    
+    // Add fields for each change
+    changes.forEach(change => {
+      let fieldContent = '';
+      
+      if (change.type === 'server') {
+        const statusEmoji = change.status === 'online' ? '🟢' : (change.status === 'offline' ? '🔴' : '⚪');
+        const previousEmoji = change.previous === 'online' ? '🟢' : (change.previous === 'offline' ? '🔴' : '⚪');
+        
+        if (change.isNew) {
+          fieldContent = `${statusEmoji} New server detected: **${change.status}**`;
+        } else if (change.status === 'removed') {
+          fieldContent = `⚪ Server removed (was ${previousEmoji} **${change.previous}**)`;
+        } else {
+          fieldContent = `${previousEmoji} **${change.previous}** → ${statusEmoji} **${change.status}**`;
+        }
+      } else if (change.type === 'service') {
+        let statusEmoji = '⚪';
+        switch (change.status) {
+          case 'online': statusEmoji = '🟢'; break;
+          case 'stopping': statusEmoji = '🟠'; break;
+          case 'stopped': statusEmoji = '🔴'; break;
+          case 'errored': statusEmoji = '❌'; break;
+          case 'launching': statusEmoji = '🟡'; break;
+        }
+        
+        let previousEmoji = '⚪';
+        switch (change.previous) {
+          case 'online': previousEmoji = '🟢'; break;
+          case 'stopping': previousEmoji = '🟠'; break;
+          case 'stopped': previousEmoji = '🔴'; break;
+          case 'errored': previousEmoji = '❌'; break;
+          case 'launching': previousEmoji = '🟡'; break;
+        }
+        
+        if (change.isNew) {
+          fieldContent = `${statusEmoji} New service detected: **${change.status}**`;
+        } else if (change.status === 'removed') {
+          fieldContent = `⚪ Service removed (was ${previousEmoji} **${change.previous}**)`;
+        } else {
+          fieldContent = `${previousEmoji} **${change.previous}** → ${statusEmoji} **${change.status}**`;
+        }
+      }
+      
+      embed.fields.push({
+        name: `${change.type === 'server' ? 'Server' : 'Service'}: ${change.name}`,
+        value: fieldContent,
+        inline: false
+      });
+    });
+    
+    // Add a detailed status field if there are many services
+    if (Object.keys(currentStatus.services || {}).length > 0) {
+      let servicesStatus = '';
+      for (const [name, info] of Object.entries(currentStatus.services)) {
+        let statusEmoji = '⚪';
+        switch (info.status) {
+          case 'online': statusEmoji = '🟢'; break;
+          case 'stopping': statusEmoji = '🟠'; break;
+          case 'stopped': statusEmoji = '🔴'; break;
+          case 'errored': statusEmoji = '❌'; break;
+          case 'launching': statusEmoji = '🟡'; break;
+        }
+        servicesStatus += `${statusEmoji} **${name}**: ${info.status}\n`;
+      }
+      
+      if (servicesStatus) {
+        embed.fields.push({
+          name: 'Current Services Status',
+          value: servicesStatus,
+          inline: false
+        });
+      }
+    }
+    
+    // Send to channel if available
+    if (this.statusChannel) {
+      try {
+        await this.statusChannel.send({ embeds: [embed] });
+        console.log('Status change notification sent to channel');
+      } catch (error) {
+        console.error(`Failed to send status notification to channel: ${error.message}`);
+      }
+    }
+    
+    // Send to owner
+    if (this.authorizedUserId) {
+      try {
+        const owner = await this.client.users.fetch(this.authorizedUserId);
+        await owner.send({ embeds: [embed] });
+        console.log('Status change notification sent to owner');
+      } catch (error) {
+        console.error(`Failed to send status notification to owner: ${error.message}`);
+      }
+    }
+  }
+}
+
+module.exports = NotificationService;

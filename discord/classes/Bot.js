@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, ChannelType } = require("discord.js");
 const CommandManager = require('./CommandManager');
+const NotificationService = require('./NotificationService');
 const fs = require('fs');
 const path = require('path');
 
@@ -28,6 +29,9 @@ class Bot {
     
     // Setup event handlers
     this.setupEventHandlers();
+    
+    // Initialize notification service
+    this.notificationService = null;
   }
   
   setupTempDirectory() {
@@ -50,6 +54,15 @@ class Bot {
       
       // Only register global commands for direct messages
       await this.commandManager.registerGlobalCommands();
+      
+      // Initialize and start the notification service
+      this.notificationService = new NotificationService(this.client, {
+        checkInterval: process.env.STATUS_CHECK_INTERVAL ? parseInt(process.env.STATUS_CHECK_INTERVAL) : 60000,
+        statusEndpoint: process.env.STATUS_ENDPOINT || 'https://blahaj.tr:2589/status'
+      });
+      
+      await this.notificationService.initialize();
+      this.notificationService.start();
       
       // Send startup notification
       await this.sendStartupNotification();
@@ -95,6 +108,11 @@ class Bot {
           name: "Relative Time",
           value: `<t:${Math.floor(Date.now() / 1000)}:R>`,
           inline: true
+        },
+        {
+          name: "Status Monitoring",
+          value: this.notificationService?.isRunning ? "✅ Active" : "❌ Inactive",
+          inline: true
         }
       ],
       footer: {
@@ -108,7 +126,79 @@ class Bot {
       await owner.send({ embeds: [startupEmbed] });
       console.log(`Sent startup notification to authorized user: ${owner.tag}`);
     } catch (error) {
-      console.error("Failed to send startup notification to authorized user:", error);
+      console.error("Failed to send startup notification to authorized user:", error.message);
+      console.log("This is not critical - the bot will still function normally");
+    }
+    
+    // Also notify in status channel if configured
+    if (this.notificationService?.statusChannel) {
+      try {
+        await this.notificationService.statusChannel.send({ embeds: [startupEmbed] });
+        console.log(`Sent startup notification to status channel: ${this.notificationService.statusChannel.name}`);
+      } catch (error) {
+        console.error("Failed to send startup notification to status channel:", error.message);
+      }
+    }
+  }
+  
+  async sendShutdownNotification(reason = "Manual shutdown", error = null) {
+    // Create shutdown embed
+    const shutdownEmbed = {
+      title: "blahaj.tr bot status update",
+      description: `Bot is shutting down at <t:${Math.floor(Date.now() / 1000)}:F>`,
+      color: 0xFF0000,
+      fields: [
+        {
+          name: "Bot Name",
+          value: this.client.user.tag,
+          inline: true
+        },
+        {
+          name: "Shutdown Reason",
+          value: reason || "Unknown",
+          inline: true
+        },
+        {
+          name: "Relative Time",
+          value: `<t:${Math.floor(Date.now() / 1000)}:R>`,
+          inline: true
+        }
+      ],
+      footer: {
+        text: "blahaj.tr"
+      }
+    };
+    
+    if (error) {
+      shutdownEmbed.fields.push({
+        name: "Error Details",
+        value: `\`\`\`\n${error.message || String(error).substring(0, 1000)}\n\`\`\``,
+        inline: false
+      });
+    }
+    
+    // Stop notification service if running
+    if (this.notificationService?.isRunning) {
+      this.notificationService.stop();
+    }
+    
+    // Notify authorized user
+    try {
+      const owner = await this.client.users.fetch(this.authorizedUserId);
+      await owner.send({ embeds: [shutdownEmbed] });
+      console.log(`Sent shutdown notification to authorized user: ${owner.tag}`);
+    } catch (error) {
+      console.error("Failed to send shutdown notification to authorized user:", error.message);
+    }
+    
+    // Also notify in status channel if available
+    if (this.notificationService?.statusChannel) {
+      try {
+        await this.notificationService.statusChannel.send({ embeds: [shutdownEmbed] });
+        console.log(`Sent shutdown notification to status channel: ${this.notificationService.statusChannel.name}`);
+      } catch (error) {
+        console.error("Failed to send shutdown notification to status channel:", error.message);
+      }
     }
   }
   
@@ -116,6 +206,18 @@ class Bot {
     // Login to Discord
     await this.client.login(process.env.DISCORD_TOKEN);
     return this;
+  }
+  
+  async stop() {
+    // Stop notification service
+    if (this.notificationService) {
+      this.notificationService.stop();
+    }
+    
+    // Destroy the client
+    if (this.client) {
+      this.client.destroy();
+    }
   }
 }
 
