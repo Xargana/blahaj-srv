@@ -5,14 +5,14 @@ class NotificationService {
     this.client = client;
     this.authorizedUserId = process.env.AUTHORIZED_USER_ID;
     this.statusChannel = null;
-    this.checkInterval = options.checkInterval || 60000; // Default: check every minute
+    this.checkInterval = options.checkInterval || 10000; // Changed to 10 seconds default
     this.statusEndpoint = options.statusEndpoint || 'https://blahaj.tr:2589/status';
     this.notificationChannelId = process.env.STATUS_NOTIFICATION_CHANNEL;
     
     // Store the previous status to compare for changes
     this.previousStatus = {
       servers: {},
-      services: {}
+      pm2Services: {} // Changed from services to pm2Services to match API response
     };
     
     // Track if this is the first check (to avoid notifications on startup)
@@ -104,7 +104,8 @@ class NotificationService {
             name: server,
             status: currentStatus.servers[server].online ? 'online' : 'offline',
             previous: previousStatus.servers[server]?.online ? 'online' : 'offline',
-            isNew: !previousStatus.servers[server]
+            isNew: !previousStatus.servers[server],
+            responseTime: currentStatus.servers[server].responseTime
           });
         }
       }
@@ -122,29 +123,30 @@ class NotificationService {
       }
     }
     
-    // Check for PM2 service status changes
-    if (previousStatus.services && currentStatus.services) {
-      for (const service in currentStatus.services) {
-        if (!previousStatus.services[service] || 
-            previousStatus.services[service].status !== currentStatus.services[service].status) {
+    // Check for PM2 service status changes - updated to use pm2Services
+    if (previousStatus.pm2Services && currentStatus.pm2Services) {
+      for (const service in currentStatus.pm2Services) {
+        if (!previousStatus.pm2Services[service] || 
+            previousStatus.pm2Services[service].status !== currentStatus.pm2Services[service].status) {
           changes.push({
             type: 'service',
             name: service,
-            status: currentStatus.services[service].status,
-            previous: previousStatus.services[service]?.status || 'unknown',
-            isNew: !previousStatus.services[service]
+            status: currentStatus.pm2Services[service].status,
+            previous: previousStatus.pm2Services[service]?.status || 'unknown',
+            isNew: !previousStatus.pm2Services[service],
+            details: currentStatus.pm2Services[service]
           });
         }
       }
       
       // Check for removed services
-      for (const service in previousStatus.services) {
-        if (!currentStatus.services[service]) {
+      for (const service in previousStatus.pm2Services) {
+        if (!currentStatus.pm2Services[service]) {
           changes.push({
             type: 'service',
             name: service,
             status: 'removed',
-            previous: previousStatus.services[service].status
+            previous: previousStatus.pm2Services[service].status
           });
         }
       }
@@ -181,6 +183,9 @@ class NotificationService {
           fieldContent = `⚪ Server removed (was ${previousEmoji} **${change.previous}**)`;
         } else {
           fieldContent = `${previousEmoji} **${change.previous}** → ${statusEmoji} **${change.status}**`;
+          if (change.responseTime !== 'unknown') {
+            fieldContent += `\nResponse time: ${change.responseTime}ms`;
+          }
         }
       } else if (change.type === 'service') {
         let statusEmoji = '⚪';
@@ -207,6 +212,13 @@ class NotificationService {
           fieldContent = `⚪ Service removed (was ${previousEmoji} **${change.previous}**)`;
         } else {
           fieldContent = `${previousEmoji} **${change.previous}** → ${statusEmoji} **${change.status}**`;
+          
+          // Add resource usage if available
+          if (change.details) {
+            const memory = change.details.memory ? Math.round(change.details.memory / (1024 * 1024) * 10) / 10 : 0;
+            fieldContent += `\nCPU: ${change.details.cpu}% | Memory: ${memory}MB`;
+            fieldContent += `\nUptime: ${Math.floor(change.details.uptime / 1000)}s | Restarts: ${change.details.restarts}`;
+          }
         }
       }
       
@@ -218,9 +230,9 @@ class NotificationService {
     });
     
     // Add a detailed status field if there are many services
-    if (Object.keys(currentStatus.services || {}).length > 0) {
+    if (Object.keys(currentStatus.pm2Services || {}).length > 0) {
       let servicesStatus = '';
-      for (const [name, info] of Object.entries(currentStatus.services)) {
+      for (const [name, info] of Object.entries(currentStatus.pm2Services)) {
         let statusEmoji = '⚪';
         switch (info.status) {
           case 'online': statusEmoji = '🟢'; break;

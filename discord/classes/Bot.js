@@ -57,7 +57,7 @@ class Bot {
       
       // Initialize and start the notification service
       this.notificationService = new NotificationService(this.client, {
-        checkInterval: process.env.STATUS_CHECK_INTERVAL ? parseInt(process.env.STATUS_CHECK_INTERVAL) : 60000,
+        checkInterval: process.env.STATUS_CHECK_INTERVAL ? parseInt(process.env.STATUS_CHECK_INTERVAL) : 5000,
         statusEndpoint: process.env.STATUS_ENDPOINT || 'https://blahaj.tr:2589/status'
       });
       
