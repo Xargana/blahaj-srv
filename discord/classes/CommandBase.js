@@ -68,14 +68,21 @@ class CommandBase {
   toJSON() {
     const builder = new SlashCommandBuilder()
       .setName(this.name)
-      .setDescription(this.description);
+      .setDescription(this.description)
+      .setDMPermission(true);  // Allow commands in DMs
     
     // Add options if defined in the child class
     if (typeof this.addOptions === 'function') {
       this.addOptions(builder);
     }
     
-    return builder.toJSON();
+    // Get the JSON representation
+    const json = builder.toJSON();
+    
+    // Add contexts to make commands available everywhere
+    json.contexts = [0, 1, 2];  // Available in all contexts (DM, GROUP_DM, GUILD)
+    
+    return json;
   }
 }
 
