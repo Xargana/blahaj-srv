@@ -14,8 +14,8 @@ const whois = require("./whois/whois");
 const app = express();
 const PORT = process.env.PORT || 2589;
 
-const key = process.env.SSL_KEY_PATH || "/etc/letsencrypt/live/blahaj.tr/privkey.pem";
-const cert = process.env.SSL_CERT_PATH || "/etc/letsencrypt/live/blahaj.tr/fullchain.pem";
+const key = process.env.SSL_KEY_PATH || "/etc/letsencrypt/live/xargana.tr/privkey.pem";
+const cert = process.env.SSL_CERT_PATH || "/etc/letsencrypt/live/xargana.tr/fullchain.pem";
 
 app.use(cors());
 app.use("/status", status);

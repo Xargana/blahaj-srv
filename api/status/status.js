@@ -6,7 +6,7 @@ const pm2 = require("pm2");
 const router = express.Router();
 
 const REMOTE_SERVERS = [
-    { name: "blahaj.tr", host: "blahaj.tr" },
+    { name: "xargana.tr", host: "xargana.tr" },
     { name: "xargana.com", host: "xargana.com" },
     { name: "home server", host: "31.223.36.208" }
 ]; 
