@@ -1,7 +1,8 @@
-
 const express = require("express");
 const ping = require("ping");
 const pm2 = require("pm2");
+const fs = require("fs");
+const path = require("path");
 
 const router = express.Router();
 
@@ -12,6 +13,22 @@ const REMOTE_SERVERS = [
 ]; 
 
 const CHECK_INTERVAL = 5 * 1000;
+const LOGS_DIR = path.join(__dirname, '../../logs');
+const ONLINE_LOGS_DIR = path.join(LOGS_DIR, 'online');
+const OFFLINE_LOGS_DIR = path.join(LOGS_DIR, 'offline');
+
+// Create log directories if they don't exist
+function ensureLogDirectories() {
+    if (!fs.existsSync(LOGS_DIR)) {
+        fs.mkdirSync(LOGS_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(ONLINE_LOGS_DIR)) {
+        fs.mkdirSync(ONLINE_LOGS_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(OFFLINE_LOGS_DIR)) {
+        fs.mkdirSync(OFFLINE_LOGS_DIR, { recursive: true });
+    }
+}
 
 let serversStatus = {};
 REMOTE_SERVERS.forEach(server => {
@@ -27,6 +44,8 @@ let pm2ServicesStatus = {};
 
 async function checkServers() {
     try {
+        ensureLogDirectories();
+        
         for (const server of REMOTE_SERVERS) {
             try {
                 const res = await ping.promise.probe(server.host, {
@@ -40,6 +59,25 @@ async function checkServers() {
                 serversStatus[server.name].responseTime = null;
             }
             serversStatus[server.name].lastChecked = new Date().toISOString();
+            
+            // Log server status to the appropriate folder
+            const timestamp = new Date().toISOString();
+            const serverStatus = serversStatus[server.name];
+            const logFolder = serverStatus.online ? ONLINE_LOGS_DIR : OFFLINE_LOGS_DIR;
+            const logFilePath = path.join(logFolder, `${server.name.replace(/\s+/g, '_')}.log`);
+            
+            // Create a human-readable log entry
+            const logEntry = `[${timestamp}] Server: ${server.name} (${server.host})\n` +
+                             `Status: ${serverStatus.online ? 'ONLINE' : 'OFFLINE'}\n` +
+                             `Response Time: ${serverStatus.responseTime ? serverStatus.responseTime + 'ms' : 'N/A'}\n` +
+                             `-----------------------------------\n`;
+            
+            // Append to log file
+            fs.appendFile(logFilePath, logEntry, (err) => {
+                if (err) {
+                    console.error(`Error writing log file for ${server.name}:`, err);
+                }
+            });
         }
     } catch (error) {
         console.error("Error in checkServers function:", error);
@@ -101,6 +139,8 @@ async function checkAll() {
 
 // Initial check with error handling
 try {
+    // Ensure log directories exist at startup
+    ensureLogDirectories();
     checkAll();
 } catch (error) {
     console.error("Error during initial check:", error);

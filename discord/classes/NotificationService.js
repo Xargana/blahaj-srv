@@ -5,7 +5,7 @@ class NotificationService {
     this.client = client;
     this.authorizedUserId = process.env.AUTHORIZED_USER_ID;
     this.statusChannel = null;
-    this.checkInterval = options.checkInterval || 10000; // Changed to 10 seconds default
+    this.checkInterval = options.checkInterval || 5000; // Changed to 5 seconds default
     this.statusEndpoint = options.statusEndpoint || 'https://blahaj.tr:2589/status';
     this.notificationChannelId = process.env.STATUS_NOTIFICATION_CHANNEL;
     
@@ -20,6 +20,15 @@ class NotificationService {
     
     // Indicate if the service is running
     this.isRunning = false;
+
+    // Add counters to track consecutive failures before marking as offline
+    this.failureTracking = {
+      servers: {},
+      pm2Services: {}
+    };
+    
+    // Number of consecutive failures required before considering something truly offline
+    this.failureThreshold = 3;
   }
   
   async initialize() {
@@ -75,19 +84,87 @@ class NotificationService {
   async checkStatus() {
     try {
       const currentStatus = await this.fetchStatus();
-      const changes = this.detectChanges(this.previousStatus, currentStatus);
+      
+      // Process current status and apply failure thresholds
+      const processedStatus = this.processStatusWithThreshold(currentStatus);
+      
+      // Detect changes between previous status and processed status
+      const changes = this.detectChanges(this.previousStatus, processedStatus);
       
       // If changes detected and not the first check, send notifications
       if (changes.length > 0 && !this.isFirstCheck) {
-        await this.sendNotifications(changes, currentStatus);
+        await this.sendNotifications(changes, processedStatus);
       }
       
       // Update previous status and set first check to false
-      this.previousStatus = currentStatus;
+      this.previousStatus = processedStatus;
       this.isFirstCheck = false;
     } catch (error) {
       console.error(`Status check failed: ${error.message}`);
     }
+  }
+  
+  processStatusWithThreshold(currentStatus) {
+    const processedStatus = {
+      servers: {...currentStatus.servers},
+      pm2Services: {...currentStatus.pm2Services}
+    };
+    
+    // Process servers
+    for (const server in currentStatus.servers) {
+      if (!currentStatus.servers[server].online) {
+        // Initialize counter if it doesn't exist
+        if (!this.failureTracking.servers[server]) {
+          this.failureTracking.servers[server] = 0;
+        }
+        
+        // Increment failures counter
+        this.failureTracking.servers[server]++;
+        
+        // If failures haven't reached threshold, keep it as online in the processed status
+        if (this.failureTracking.servers[server] < this.failureThreshold) {
+          processedStatus.servers[server] = {
+            ...currentStatus.servers[server],
+            online: true // Keep it as online until threshold reached
+          };
+          console.log(`Server ${server} failure count: ${this.failureTracking.servers[server]}/${this.failureThreshold}`);
+        } else {
+          console.log(`Server ${server} marked offline after ${this.failureThreshold} consecutive failures`);
+        }
+      } else {
+        // Reset counter if the server is online
+        this.failureTracking.servers[server] = 0;
+      }
+    }
+    
+    // Process PM2 services
+    for (const service in currentStatus.pm2Services) {
+      if (currentStatus.pm2Services[service].status !== 'online') {
+        // Initialize counter if it doesn't exist
+        if (!this.failureTracking.pm2Services[service]) {
+          this.failureTracking.pm2Services[service] = 0;
+        }
+        
+        // Increment failures counter
+        this.failureTracking.pm2Services[service]++;
+        
+        // If failures haven't reached threshold, keep it as online in the processed status
+        if (this.failureTracking.pm2Services[service] < this.failureThreshold) {
+          processedStatus.pm2Services[service] = {
+            ...currentStatus.pm2Services[service],
+            status: 'online' // Keep it as online until threshold reached
+          };
+          console.log(`Service ${service} failure count: ${this.failureTracking.pm2Services[service]}/${this.failureThreshold}`);
+        } else {
+          console.log(`Service ${service} marked as ${currentStatus.pm2Services[service].status} after ${this.failureThreshold} consecutive failures`);
+        }
+      } else {
+        // Reset counter if the service is online
+        this.failureTracking.pm2Services[service] = 0;
+      }
+    }
+    
+    return processedStatus;
   }
   
   detectChanges(previousStatus, currentStatus) {
