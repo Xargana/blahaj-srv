@@ -6,7 +6,7 @@ class NotificationService {
     this.authorizedUserId = process.env.AUTHORIZED_USER_ID;
     this.statusChannel = null;
     this.checkInterval = options.checkInterval || 5000; // Changed to 5 seconds default
-    this.statusEndpoint = options.statusEndpoint || 'https://blahaj.tr:2589/status';
+    this.statusEndpoint = options.statusEndpoint || 'https://xargana.tr:2589/status';
     this.notificationChannelId = process.env.STATUS_NOTIFICATION_CHANNEL;
     
     // Store the previous status to compare for changes
@@ -85,7 +85,7 @@ class NotificationService {
     try {
       const currentStatus = await this.fetchStatus();
       
-      // Process current status and apply failure thresholds
+      // Process current status with failure threshold logic for ALL servers and services
       const processedStatus = this.processStatusWithThreshold(currentStatus);
       
       // Detect changes between previous status and processed status
@@ -105,66 +105,95 @@ class NotificationService {
   }
   
   processStatusWithThreshold(currentStatus) {
+    // Create a deep copy of the current status to avoid modifying the original
     const processedStatus = {
-      servers: {...currentStatus.servers},
-      pm2Services: {...currentStatus.pm2Services}
+      servers: {},
+      pm2Services: {}
     };
     
-    // Process servers
-    for (const server in currentStatus.servers) {
-      if (!currentStatus.servers[server].online) {
-        // Initialize counter if it doesn't exist
-        if (!this.failureTracking.servers[server]) {
+    // Process ALL servers with failure threshold logic
+    if (currentStatus.servers) {
+      Object.keys(currentStatus.servers).forEach(server => {
+        // Copy the server data
+        processedStatus.servers[server] = {...currentStatus.servers[server]};
+        
+        // Apply failure threshold logic
+        if (!currentStatus.servers[server].online) {
+          // Initialize counter if it doesn't exist
+          if (!this.failureTracking.servers[server]) {
+            this.failureTracking.servers[server] = 0;
+          }
+          
+          // Increment failures counter
+          this.failureTracking.servers[server]++;
+          
+          // If failures haven't reached threshold, keep it as online in the processed status
+          if (this.failureTracking.servers[server] < this.failureThreshold) {
+            processedStatus.servers[server].online = true; // Keep it as online until threshold reached
+            console.log(`Server ${server} failure count: ${this.failureTracking.servers[server]}/${this.failureThreshold}`);
+          } else {
+            console.log(`Server ${server} marked offline after ${this.failureThreshold} consecutive failures`);
+          }
+        } else {
+          // Reset counter if the server is online
           this.failureTracking.servers[server] = 0;
         }
-        
-        // Increment failures counter
-        this.failureTracking.servers[server]++;
-        
-        // If failures haven't reached threshold, keep it as online in the processed status
-        if (this.failureTracking.servers[server] < this.failureThreshold) {
-          processedStatus.servers[server] = {
-            ...currentStatus.servers[server],
-            online: true // Keep it as online until threshold reached
-          };
-          console.log(`Server ${server} failure count: ${this.failureTracking.servers[server]}/${this.failureThreshold}`);
-        } else {
-          console.log(`Server ${server} marked offline after ${this.failureThreshold} consecutive failures`);
-        }
-      } else {
-        // Reset counter if the server is online
-        this.failureTracking.servers[server] = 0;
-      }
+      });
     }
     
-    // Process PM2 services
-    for (const service in currentStatus.pm2Services) {
-      if (currentStatus.pm2Services[service].status !== 'online') {
-        // Initialize counter if it doesn't exist
-        if (!this.failureTracking.pm2Services[service]) {
+    // Process ALL PM2 services with failure threshold logic
+    if (currentStatus.pm2Services) {
+      Object.keys(currentStatus.pm2Services).forEach(service => {
+        // Copy the service data
+        processedStatus.pm2Services[service] = {...currentStatus.pm2Services[service]};
+        
+        // Apply failure threshold logic
+        if (currentStatus.pm2Services[service].status !== 'online') {
+          // Initialize counter if it doesn't exist
+          if (!this.failureTracking.pm2Services[service]) {
+            this.failureTracking.pm2Services[service] = 0;
+          }
+          
+          // Increment failures counter
+          this.failureTracking.pm2Services[service]++;
+          
+          // If failures haven't reached threshold, keep it as online in the processed status
+          if (this.failureTracking.pm2Services[service] < this.failureThreshold) {
+            processedStatus.pm2Services[service].status = 'online'; // Keep it as online until threshold reached
+            console.log(`Service ${service} failure count: ${this.failureTracking.pm2Services[service]}/${this.failureThreshold}`);
+          } else {
+            console.log(`Service ${service} marked as ${currentStatus.pm2Services[service].status} after ${this.failureThreshold} consecutive failures`);
+          }
+        } else {
+          // Reset counter if the service is online
           this.failureTracking.pm2Services[service] = 0;
         }
-        
-        // Increment failures counter
-        this.failureTracking.pm2Services[service]++;
-        
-        // If failures haven't reached threshold, keep it as online in the processed status
-        if (this.failureTracking.pm2Services[service] < this.failureThreshold) {
-          processedStatus.pm2Services[service] = {
-            ...currentStatus.pm2Services[service],
-            status: 'online' // Keep it as online until threshold reached
-          };
-          console.log(`Service ${service} failure count: ${this.failureTracking.pm2Services[service]}/${this.failureThreshold}`);
-        } else {
-          console.log(`Service ${service} marked as ${currentStatus.pm2Services[service].status} after ${this.failureThreshold} consecutive failures`);
-        }
-      } else {
-        // Reset counter if the service is online
-        this.failureTracking.pm2Services[service] = 0;
+      });
+    }
+    
+    // Clean up tracking for removed servers and services
+    this.cleanupFailureTracking(currentStatus);
+    
+    return processedStatus;
+  }
+  
+  // Remove tracking entries for servers/services that no longer exist
+  cleanupFailureTracking(currentStatus) {
+    // Clean up servers tracking
+    for (const server in this.failureTracking.servers) {
+      if (!currentStatus.servers || !currentStatus.servers[server]) {
+        delete this.failureTracking.servers[server];
+        console.log(`Removed tracking for non-existent server: ${server}`);
       }
     }
     
-    return processedStatus;
+    // Clean up services tracking
+    for (const service in this.failureTracking.pm2Services) {
+      if (!currentStatus.pm2Services || !currentStatus.pm2Services[service]) {
+        delete this.failureTracking.pm2Services[service];
+        console.log(`Removed tracking for non-existent service: ${service}`);
+      }
+    }
   }
   
   detectChanges(previousStatus, currentStatus) {
@@ -242,7 +271,7 @@ class NotificationService {
       timestamp: new Date(),
       fields: [],
       footer: {
-        text: 'blahaj.tr Status Monitor'
+        text: 'xargana.tr Status Monitor'
       }
     };
     
@@ -260,7 +289,7 @@ class NotificationService {
           fieldContent = `⚪ Server removed (was ${previousEmoji} **${change.previous}**)`;
         } else {
           fieldContent = `${previousEmoji} **${change.previous}** → ${statusEmoji} **${change.status}**`;
-          if (change.responseTime !== 'unknown') {
+          if (change.responseTime !== undefined && change.responseTime !== 'unknown') {
             fieldContent += `\nResponse time: ${change.responseTime}ms`;
           }
         }
@@ -292,9 +321,13 @@ class NotificationService {
           
           // Add resource usage if available
           if (change.details) {
-            const memory = change.details.memory ? Math.round(change.details.memory / (1024 * 1024) * 10) / 10 : 0;
-            fieldContent += `\nCPU: ${change.details.cpu}% | Memory: ${memory}MB`;
-            fieldContent += `\nUptime: ${Math.floor(change.details.uptime / 1000)}s | Restarts: ${change.details.restarts}`;
+            if (change.details.memory !== undefined) {
+              const memory = Math.round(change.details.memory / (1024 * 1024) * 10) / 10;
+              fieldContent += `\nCPU: ${change.details.cpu || 0}% | Memory: ${memory}MB`;
+            }
+            if (change.details.uptime !== undefined) {
+              fieldContent += `\nUptime: ${Math.floor(change.details.uptime / 1000)}s | Restarts: ${change.details.restarts || 0}`;
+            }
           }
         }
       }
