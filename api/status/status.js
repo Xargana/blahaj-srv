@@ -3,6 +3,19 @@ const ping = require("ping");
 const pm2 = require("pm2");
 const fs = require("fs");
 const path = require("path");
+const axios = require("axios");
+const admin = require("firebase-admin");
+
+// Initialize Firebase Admin SDK
+try {
+    const serviceAccount = require("../../firebase-service-account.json");
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    console.log("Firebase Admin SDK initialized successfully");
+} catch (error) {
+    console.error("Error initializing Firebase Admin SDK:", error);
+}
 
 const router = express.Router();
 
@@ -30,6 +43,10 @@ function ensureLogDirectories() {
     }
 }
 
+// Track previous states for notifications
+let previousServersStatus = {};
+let previousPM2Status = {};
+
 let serversStatus = {};
 REMOTE_SERVERS.forEach(server => {
     serversStatus[server.name] = {
@@ -37,10 +54,40 @@ REMOTE_SERVERS.forEach(server => {
         lastChecked: null,
         responseTime: null,
     };
+    // Initialize previous status
+    previousServersStatus[server.name] = false;
 });
 
 // Add PM2 services status object
 let pm2ServicesStatus = {};
+
+// Function to send FCM notification
+async function sendFCMNotification(message, topic) {
+    try {
+        if (!admin.apps.length) {
+            console.warn("Firebase Admin not initialized, skipping notification");
+            return;
+        }
+
+        // Create the message object according to Firebase Admin SDK format
+        const fcmMessage = {
+            topic: topic,
+            notification: {
+                title: 'Server Status Alert',
+                body: message
+            },
+            data: {
+                type: 'server_status',
+                timestamp: Date.now().toString()
+            }
+        };
+
+        await admin.messaging().send(fcmMessage);
+        console.log(`Notification sent: ${message}`);
+    } catch (error) {
+        console.error('Error sending notification:', error);
+    }
+}
 
 async function checkServers() {
     try {
@@ -51,13 +98,37 @@ async function checkServers() {
                 const res = await ping.promise.probe(server.host, {
                     timeout: 4, // Set a timeout of 4 seconds
                 });
-                serversStatus[server.name].online = res.alive;
+                
+                // Get previous status before updating
+                const wasOnline = previousServersStatus[server.name];
+                const isNowOnline = res.alive;
+                
+                // Update status
+                serversStatus[server.name].online = isNowOnline;
                 serversStatus[server.name].responseTime = res.time;
+                
+                // Send notifications for status changes
+                if (wasOnline === false && isNowOnline) {
+                    await sendFCMNotification(`Server ${server.name} is back online`, 'service_online');
+                } else if (wasOnline === true && !isNowOnline) {
+                    await sendFCMNotification(`Server ${server.name} is offline`, 'service_offline');
+                }
+                
+                // Update previous status
+                previousServersStatus[server.name] = isNowOnline;
+                
             } catch (error) {
                 console.error(`Error pinging ${server.host}:`, error);
                 serversStatus[server.name].online = false;
                 serversStatus[server.name].responseTime = null;
+                
+                // Check if status changed from online to offline
+                if (previousServersStatus[server.name] === true) {
+                    await sendFCMNotification(`Server ${server.name} is unreachable`, 'service_offline');
+                    previousServersStatus[server.name] = false;
+                }
             }
+            
             serversStatus[server.name].lastChecked = new Date().toISOString();
             
             // Log server status to the appropriate folder
@@ -103,14 +174,31 @@ async function checkPM2Services() {
               }
               
               // Update PM2 services status
-              list.forEach(process => {
+              list.forEach(async (process) => {
                   // Calculate uptime correctly - pm_uptime is a timestamp, not a duration
                   const uptimeMs = process.pm2_env.pm_uptime ? 
                                   Date.now() - process.pm2_env.pm_uptime : 
                                   null;
                   
-                  pm2ServicesStatus[process.name] = {
-                      name: process.name,
+                  const processName = process.name;
+                  const isNowOnline = process.pm2_env.status === 'online';
+                  
+                  // Check previous status
+                  const wasOnline = previousPM2Status[processName];
+                  
+                  // If status changed, send notification
+                  if (wasOnline === false && isNowOnline) {
+                      await sendFCMNotification(`PM2 service ${processName} is back online`, 'service_online');
+                  } else if (wasOnline === true && !isNowOnline) {
+                      await sendFCMNotification(`PM2 service ${processName} is offline (status: ${process.pm2_env.status})`, 'service_offline');
+                  }
+                  
+                  // Update status tracking
+                  previousPM2Status[processName] = isNowOnline;
+                  
+                  // Update status object
+                  pm2ServicesStatus[processName] = {
+                      name: processName,
                       id: process.pm_id,
                       status: process.pm2_env.status,
                       cpu: process.monit ? process.monit.cpu : null,
