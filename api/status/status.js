@@ -156,64 +156,73 @@ async function checkServers() {
 }
 
 async function checkPM2Services() {
-  return new Promise((resolve, reject) => {
-      pm2.connect(function(err) {
-          if (err) {
-              console.error('Error connecting to PM2:', err);
-              pm2.disconnect();
-              resolve();
-              return;
-          }
-          
-          pm2.list((err, list) => {
-              if (err) {
-                  console.error('Error getting PM2 process list:', err);
-                  pm2.disconnect();
-                  resolve();
-                  return;
-              }
-              
-              // Update PM2 services status
-              list.forEach(async (process) => {
-                  // Calculate uptime correctly - pm_uptime is a timestamp, not a duration
-                  const uptimeMs = process.pm2_env.pm_uptime ? 
-                                  Date.now() - process.pm2_env.pm_uptime : 
-                                  null;
-                  
-                  const processName = process.name;
-                  const isNowOnline = process.pm2_env.status === 'online';
-                  
-                  // Check previous status
-                  const wasOnline = previousPM2Status[processName];
-                  
-                  // If status changed, send notification
-                  if (wasOnline === false && isNowOnline) {
-                      await sendFCMNotification(`PM2 service ${processName} is back online`, 'service_online');
-                  } else if (wasOnline === true && !isNowOnline) {
-                      await sendFCMNotification(`PM2 service ${processName} is offline (status: ${process.pm2_env.status})`, 'service_offline');
-                  }
-                  
-                  // Update status tracking
-                  previousPM2Status[processName] = isNowOnline;
-                  
-                  // Update status object
-                  pm2ServicesStatus[processName] = {
-                      name: processName,
-                      id: process.pm_id,
-                      status: process.pm2_env.status,
-                      cpu: process.monit ? process.monit.cpu : null,
-                      memory: process.monit ? process.monit.memory : null,
-                      uptime: uptimeMs, // Store the uptime in milliseconds
-                      restarts: process.pm2_env.restart_time,
-                      lastChecked: new Date().toISOString()
-                  };
-              });
-              
-              pm2.disconnect();
-              resolve();
-          });
-      });
-  });
+    return new Promise((resolve, reject) => {
+        pm2.connect(function(err) {
+            if (err) {
+                console.error('Error connecting to PM2:', err);
+                pm2.disconnect();
+                resolve();
+                return;
+            }
+            
+            pm2.list(async (err, list) => {
+                if (err) {
+                    console.error('Error getting PM2 process list:', err);
+                    pm2.disconnect();
+                    resolve();
+                    return;
+                }
+                
+                try {
+                    // Process each PM2 service sequentially with proper async handling
+                    for (const process of list) {
+                        const uptimeMs = process.pm2_env.pm_uptime ? 
+                                        Date.now() - process.pm2_env.pm_uptime : 
+                                        null;
+                        
+                        const processName = process.name;
+                        const isNowOnline = process.pm2_env.status === 'online';
+                        
+                        // Check if we've seen this process before
+                        if (previousPM2Status[processName] === undefined) {
+                            // First time seeing this process - initialize and don't send notification
+                            previousPM2Status[processName] = isNowOnline;
+                            console.log(`Initializing PM2 service status for ${processName}: ${isNowOnline ? 'online' : 'offline'}`);
+                        } 
+                        // Check if status changed
+                        else if (previousPM2Status[processName] === false && isNowOnline) {
+                            await sendFCMNotification(`PM2 service ${processName} is back online`, 'service_online');
+                            console.log(`PM2 service ${processName} changed from offline to online`);
+                        } 
+                        else if (previousPM2Status[processName] === true && !isNowOnline) {
+                            await sendFCMNotification(`PM2 service ${processName} is offline (status: ${process.pm2_env.status})`, 'service_offline');
+                            console.log(`PM2 service ${processName} changed from online to ${process.pm2_env.status}`);
+                        }
+                        
+                        // Update previous status
+                        previousPM2Status[processName] = isNowOnline;
+                        
+                        // Update status object
+                        pm2ServicesStatus[processName] = {
+                            name: processName,
+                            id: process.pm_id,
+                            status: process.pm2_env.status,
+                            cpu: process.monit ? process.monit.cpu : null,
+                            memory: process.monit ? process.monit.memory : null,
+                            uptime: uptimeMs,
+                            restarts: process.pm2_env.restart_time,
+                            lastChecked: new Date().toISOString()
+                        };
+                    }
+                } catch (error) {
+                    console.error('Error processing PM2 services:', error);
+                }
+                
+                pm2.disconnect();
+                resolve();
+            });
+        });
+    });
 }
 
 async function checkAll() {
