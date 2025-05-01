@@ -137,3 +137,6 @@ dist
 
 # pm2 ecosystem file
 ecosystem.config.js
+
+# firebase service file
+firebase-service-account.json
