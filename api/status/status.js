@@ -21,7 +21,6 @@ const router = express.Router();
 
 const REMOTE_SERVERS = [
     { name: "xargana.tr", host: "xargana.tr" },
-    { name: "xargana.com", host: "xargana.com" },
     { name: "home server", host: "31.223.36.208" }
 ]; 
 
@@ -29,6 +28,9 @@ const CHECK_INTERVAL = 5 * 1000;
 const LOGS_DIR = path.join(__dirname, '../../logs');
 const ONLINE_LOGS_DIR = path.join(LOGS_DIR, 'online');
 const OFFLINE_LOGS_DIR = path.join(LOGS_DIR, 'offline');
+
+// Number of offline cycles before sending a notification
+const NOTIFICATION_THRESHOLD = 3;
 
 // Create log directories if they don't exist
 function ensureLogDirectories() {
@@ -47,6 +49,10 @@ function ensureLogDirectories() {
 let previousServersStatus = {};
 let previousPM2Status = {};
 
+// Track consecutive offline cycles
+let serverFailureCounts = {};
+let pm2FailureCounts = {};
+
 let serversStatus = {};
 REMOTE_SERVERS.forEach(server => {
     serversStatus[server.name] = {
@@ -56,6 +62,8 @@ REMOTE_SERVERS.forEach(server => {
     };
     // Initialize previous status
     previousServersStatus[server.name] = false;
+    // Initialize failure counters
+    serverFailureCounts[server.name] = 0;
 });
 
 // Add PM2 services status object
@@ -107,11 +115,26 @@ async function checkServers() {
                 serversStatus[server.name].online = isNowOnline;
                 serversStatus[server.name].responseTime = res.time;
                 
-                // Send notifications for status changes
-                if (wasOnline === false && isNowOnline) {
-                    await sendFCMNotification(`Server ${server.name} is back online`, 'service_online');
-                } else if (wasOnline === true && !isNowOnline) {
-                    await sendFCMNotification(`Server ${server.name} is offline`, 'service_offline');
+                if (isNowOnline) {
+                    // Service is online
+                    
+                    // Reset failure counter
+                    serverFailureCounts[server.name] = 0;
+                    
+                    // If service was previously offline, send online notification
+                    if (wasOnline === false) {
+                        await sendFCMNotification(`Server ${server.name} is back online`, 'service_online');
+                    }
+                } else {
+                    // Service is offline
+                    
+                    // Increment failure counter
+                    serverFailureCounts[server.name]++;
+                    
+                    // Check if we've reached the notification threshold
+                    if (serverFailureCounts[server.name] === NOTIFICATION_THRESHOLD) {
+                        await sendFCMNotification(`Server ${server.name} is offline (after ${NOTIFICATION_THRESHOLD} checks)`, 'service_offline');
+                    }
                 }
                 
                 // Update previous status
@@ -122,11 +145,16 @@ async function checkServers() {
                 serversStatus[server.name].online = false;
                 serversStatus[server.name].responseTime = null;
                 
-                // Check if status changed from online to offline
-                if (previousServersStatus[server.name] === true) {
-                    await sendFCMNotification(`Server ${server.name} is unreachable`, 'service_offline');
-                    previousServersStatus[server.name] = false;
+                // Increment failure counter
+                serverFailureCounts[server.name]++;
+                
+                // Check if we've reached the notification threshold
+                if (serverFailureCounts[server.name] === NOTIFICATION_THRESHOLD) {
+                    await sendFCMNotification(`Server ${server.name} is unreachable (after ${NOTIFICATION_THRESHOLD} checks)`, 'service_offline');
                 }
+                
+                // Update previous status
+                previousServersStatus[server.name] = false;
             }
             
             serversStatus[server.name].lastChecked = new Date().toISOString();
@@ -141,6 +169,7 @@ async function checkServers() {
             const logEntry = `[${timestamp}] Server: ${server.name} (${server.host})\n` +
                              `Status: ${serverStatus.online ? 'ONLINE' : 'OFFLINE'}\n` +
                              `Response Time: ${serverStatus.responseTime ? serverStatus.responseTime + 'ms' : 'N/A'}\n` +
+                             `Failure Count: ${serverFailureCounts[server.name]}\n` +
                              `-----------------------------------\n`;
             
             // Append to log file
@@ -187,16 +216,28 @@ async function checkPM2Services() {
                         if (previousPM2Status[processName] === undefined) {
                             // First time seeing this process - initialize and don't send notification
                             previousPM2Status[processName] = isNowOnline;
+                            pm2FailureCounts[processName] = 0;
                             console.log(`Initializing PM2 service status for ${processName}: ${isNowOnline ? 'online' : 'offline'}`);
-                        } 
-                        // Check if status changed
-                        else if (previousPM2Status[processName] === false && isNowOnline) {
-                            await sendFCMNotification(`PM2 service ${processName} is back online`, 'service_online');
-                            console.log(`PM2 service ${processName} changed from offline to online`);
-                        } 
-                        else if (previousPM2Status[processName] === true && !isNowOnline) {
-                            await sendFCMNotification(`PM2 service ${processName} is offline (status: ${process.pm2_env.status})`, 'service_offline');
-                            console.log(`PM2 service ${processName} changed from online to ${process.pm2_env.status}`);
+                        } else {
+                            if (isNowOnline) {
+                                // Service is online - reset failure counter
+                                pm2FailureCounts[processName] = 0;
+                                
+                                // If service was previously offline, send online notification
+                                if (previousPM2Status[processName] === false) {
+                                    await sendFCMNotification(`PM2 service ${processName} is back online`, 'service_online');
+                                    console.log(`PM2 service ${processName} changed from offline to online`);
+                                }
+                            } else {
+                                // Service is offline - increment failure counter
+                                pm2FailureCounts[processName]++;
+                                
+                                // Only send notification if threshold is reached
+                                if (pm2FailureCounts[processName] === NOTIFICATION_THRESHOLD) {
+                                    await sendFCMNotification(`PM2 service ${processName} is offline (status: ${process.pm2_env.status}, after ${NOTIFICATION_THRESHOLD} checks)`, 'service_offline');
+                                    console.log(`PM2 service ${processName} is offline for ${NOTIFICATION_THRESHOLD} consecutive checks`);
+                                }
+                            }
                         }
                         
                         // Update previous status
@@ -211,6 +252,7 @@ async function checkPM2Services() {
                             memory: process.monit ? process.monit.memory : null,
                             uptime: uptimeMs,
                             restarts: process.pm2_env.restart_time,
+                            failureCount: pm2FailureCounts[processName],
                             lastChecked: new Date().toISOString()
                         };
                     }
@@ -257,7 +299,10 @@ router.get("/", (req, res) => {
     try {
         res.json({
             servers: serversStatus,
-            pm2Services: pm2ServicesStatus
+            pm2Services: pm2ServicesStatus,
+            serverFailureCounts: serverFailureCounts,
+            pm2FailureCounts: pm2FailureCounts,
+            notificationThreshold: NOTIFICATION_THRESHOLD
         });
     } catch (error) {
         console.error("Error sending status response:", error);
