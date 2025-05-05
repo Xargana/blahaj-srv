@@ -20,8 +20,8 @@ try {
 const router = express.Router();
 
 const REMOTE_SERVERS = [
-    { name: "xargana.tr", host: "xargana.tr" },
-    { name: "home server", host: "31.223.36.208" }
+      { name : "google.com", host: "google.com" },
+  //  { name: "home server", host: "31.223.36.208" } removed cause router not behaving, dropped all pings today.
 ]; 
 
 const CHECK_INTERVAL = 5 * 1000;
