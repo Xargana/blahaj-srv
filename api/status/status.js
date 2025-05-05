@@ -21,6 +21,7 @@ const router = express.Router();
 
 const REMOTE_SERVERS = [
       { name : "google.com", host: "google.com" },
+      { name: "xargana.tr", host: "xargana.tr"}
   //  { name: "home server", host: "31.223.36.208" } removed cause router not behaving, dropped all pings today.
 ]; 
 
