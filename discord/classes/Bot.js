@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits, ChannelType } = require("discord.js");
 const CommandManager = require('./CommandManager');
-const NotificationService = require('./NotificationService');
+// const NotificationService = require('./NotificationService');
 const fs = require('fs');
 const path = require('path');
 
@@ -31,7 +31,7 @@ class Bot {
     this.setupEventHandlers();
     
     // Initialize notification service
-    this.notificationService = null;
+    // this.notificationService = null;
   }
   
   setupTempDirectory() {
@@ -56,13 +56,13 @@ class Bot {
       await this.commandManager.registerGlobalCommands();
       
       // Initialize and start the notification service
-      this.notificationService = new NotificationService(this.client, {
-        checkInterval: process.env.STATUS_CHECK_INTERVAL ? parseInt(process.env.STATUS_CHECK_INTERVAL) : 5000,
-        statusEndpoint: process.env.STATUS_ENDPOINT || 'https://blahaj.tr:2589/status'
-      });
+      // this.notificationService = new NotificationService(this.client, {
+      //   checkInterval: process.env.STATUS_CHECK_INTERVAL ? parseInt(process.env.STATUS_CHECK_INTERVAL) : 5000,
+      //   statusEndpoint: process.env.STATUS_ENDPOINT || 'https://blahaj.tr:2589/status'
+      // });
       
-      await this.notificationService.initialize();
-      this.notificationService.start();
+      // await this.notificationService.initialize();
+      // this.notificationService.start();
       
       // Send startup notification
       await this.sendStartupNotification();
@@ -108,12 +108,12 @@ class Bot {
           name: "Relative Time",
           value: `<t:${Math.floor(Date.now() / 1000)}:R>`,
           inline: true
-        },
-        {
-          name: "Status Monitoring",
-          value: this.notificationService?.isRunning ? "✅ Active" : "❌ Inactive",
-          inline: true
         }
+        // {
+        //   name: "Status Monitoring",
+        //   value: this.notificationService?.isRunning ? "✅ Active" : "❌ Inactive",
+        //   inline: true
+        // }
       ],
       footer: {
         text: "blahaj.tr"
@@ -131,14 +131,14 @@ class Bot {
     }
     
     // Also notify in status channel if configured
-    if (this.notificationService?.statusChannel) {
-      try {
-        await this.notificationService.statusChannel.send({ embeds: [startupEmbed] });
-        console.log(`Sent startup notification to status channel: ${this.notificationService.statusChannel.name}`);
-      } catch (error) {
-        console.error("Failed to send startup notification to status channel:", error.message);
-      }
-    }
+    // if (this.notificationService?.statusChannel) {
+    //   try {
+    //     await this.notificationService.statusChannel.send({ embeds: [startupEmbed] });
+    //     console.log(`Sent startup notification to status channel: ${this.notificationService.statusChannel.name}`);
+    //   } catch (error) {
+    //     console.error("Failed to send startup notification to status channel:", error.message);
+    //   }
+    // }
   }
   
   async sendShutdownNotification(reason = "Manual shutdown", error = null) {
@@ -178,9 +178,9 @@ class Bot {
     }
     
     // Stop notification service if running
-    if (this.notificationService?.isRunning) {
-      this.notificationService.stop();
-    }
+    // if (this.notificationService?.isRunning) {
+    //   this.notificationService.stop();
+    // }
     
     // Notify authorized user
     try {
@@ -192,14 +192,14 @@ class Bot {
     }
     
     // Also notify in status channel if available
-    if (this.notificationService?.statusChannel) {
-      try {
-        await this.notificationService.statusChannel.send({ embeds: [shutdownEmbed] });
-        console.log(`Sent shutdown notification to status channel: ${this.notificationService.statusChannel.name}`);
-      } catch (error) {
-        console.error("Failed to send shutdown notification to status channel:", error.message);
-      }
-    }
+    // if (this.notificationService?.statusChannel) {
+    //   try {
+    //     await this.notificationService.statusChannel.send({ embeds: [shutdownEmbed] });
+    //     console.log(`Sent shutdown notification to status channel: ${this.notificationService.statusChannel.name}`);
+    //   } catch (error) {
+    //     console.error("Failed to send shutdown notification to status channel:", error.message);
+    //   }
+    // }
   }
   
   async start() {
@@ -210,9 +210,9 @@ class Bot {
   
   async stop() {
     // Stop notification service
-    if (this.notificationService) {
-      this.notificationService.stop();
-    }
+    // if (this.notificationService) {
+    //   this.notificationService.stop();
+    // }
     
     // Destroy the client
     if (this.client) {
